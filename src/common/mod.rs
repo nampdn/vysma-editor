@@ -1,3 +1,4 @@
-mod cli;
+pub mod cli;
 mod client_network;
-mod shared;
+mod renderer;
+pub mod shared;

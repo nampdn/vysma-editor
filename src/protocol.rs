@@ -76,7 +76,7 @@ impl Plugin for ProtocolPlugin {
         app.register_type::<Inputs>();
 
         // inputs
-        app.add_plugins(InputPlugin::default());
+        // app.add_plugins(InputPlugin::default());
 
         // components
         app.register_component::<PlayerId>()
