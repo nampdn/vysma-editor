@@ -7,6 +7,8 @@ use bevy::{
     prelude::*,
 };
 
+use super::renderer::RendererPlugin;
+use super::shared::SharedPlugin;
 use super::stepping;
 
 // These constants are defined in `Transform` units.
@@ -59,6 +61,8 @@ impl Plugin for BreakoutGamePlugin {
                 .add_schedule(FixedUpdate)
                 .at(Val::Percent(35.0), Val::Percent(50.0)),
         )
+        .add_plugins(SharedPlugin)
+        .add_plugins(RendererPlugin)
         .insert_resource(Score(0))
         .insert_resource(ClearColor(BACKGROUND_COLOR))
         .add_event::<CollisionEvent>()
@@ -79,7 +83,6 @@ impl Plugin for BreakoutGamePlugin {
         .add_systems(Update, update_scoreboard);
     }
 }
-
 
 #[derive(Component)]
 struct Paddle;

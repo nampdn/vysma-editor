@@ -23,8 +23,13 @@ pub use ffi::*;
 mod android_asset_io;
 
 mod breakout_game;
+mod client;
+mod common;
 mod lighting_demo;
+mod protocol;
+mod renderer;
 mod shapes_demo;
+mod shared;
 mod stepping;
 
 #[allow(unused_variables)]
