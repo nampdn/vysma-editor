@@ -5,11 +5,14 @@ use bevy::log::{Level, LogPlugin};
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
 use clap::{Parser, Subcommand};
+#[cfg(any(target_family = "wasm", target_os = "ios"))]
+use rand::random;
 
 #[cfg(feature = "client")]
 use super::client_network::{ClientNetwork, ClientTransports, connect};
 #[cfg(all(feature = "gui", feature = "client"))]
 use super::renderer::ClientRendererPlugin;
+use crate::common::shared::{CLIENT_PORT, SERVER_ADDR, SERVER_PORT, SHARED_SETTINGS};
 #[cfg(feature = "gui")]
 use bevy::window::{PresentMode, Window, WindowPlugin};
 
@@ -97,8 +100,6 @@ impl Cli {
         match self.mode {
             #[cfg(feature = "client")]
             Some(Mode::Client { client_id }) => {
-                use crate::common::shared::{CLIENT_PORT, SERVER_ADDR, SHARED_SETTINGS};
-
                 let client = app
                     .world_mut()
                     .spawn(ClientNetwork {
@@ -106,8 +107,8 @@ impl Cli {
                         client_port: CLIENT_PORT,
                         server_addr: SERVER_ADDR,
                         conditioner: Some(RecvLinkConditioner::new(conditioner.clone())),
-                        // transport: ClientTransports::Udp,
-                        transport: ClientTransports::WebTransport,
+                        transport: ClientTransports::Udp,
+                        // transport: ClientTransports::WebTransport,
                         // #[cfg(feature = "steam")]
                         // transport: ClientTransports::Steam,
                         shared: SHARED_SETTINGS,
@@ -117,28 +118,32 @@ impl Cli {
             }
             #[cfg(feature = "server")]
             Some(Mode::Server) => {
-                // let server = app
-                //     .world_mut()
-                //     .spawn(ExampleServer {
-                //         conditioner: None,
-                //         // transport: ServerTransports::Udp {
-                //         //     local_port: SERVER_PORT,
-                //         // },
-                //         transport: ServerTransports::WebTransport {
-                //             local_port: SERVER_PORT,
-                //             certificate: WebTransportCertificateSettings::FromFile {
-                //                 cert: "../../certificates/cert.pem".to_string(),
-                //                 key: "../../certificates/key.pem".to_string(),
-                //             },
-                //         },
-                //         // #[cfg(feature = "steam")]
-                //         // transport: ServerTransports::Steam {
-                //         //     local_port: SERVER_PORT,
-                //         // },
-                //         shared: SHARED_SETTINGS,
-                //     })
-                //     .id();
-                // app.add_systems(Startup, start);
+                use crate::common::server_network::{
+                    ServerNetwork, ServerTransports, WebTransportCertificateSettings, start,
+                };
+
+                let server = app
+                    .world_mut()
+                    .spawn(ServerNetwork {
+                        conditioner: None,
+                        transport: ServerTransports::Udp {
+                            local_port: SERVER_PORT,
+                        },
+                        // transport: ServerTransports::WebTransport {
+                        //     local_port: SERVER_PORT,
+                        //     certificate: WebTransportCertificateSettings::FromFile {
+                        //         cert: "./certificates/cert.pem".to_string(),
+                        //         key: "./certificates/key.pem".to_string(),
+                        //     },
+                        // },
+                        // #[cfg(feature = "steam")]
+                        // transport: ServerTransports::Steam {
+                        //     local_port: SERVER_PORT,
+                        // },
+                        shared: SHARED_SETTINGS,
+                    })
+                    .id();
+                app.add_systems(Startup, start);
             }
             #[cfg(all(feature = "client", feature = "server"))]
             Some(Mode::HostClient { client_id }) => {
@@ -236,8 +241,8 @@ impl Default for Cli {
 
 pub fn cli() -> Cli {
     cfg_if::cfg_if! {
-        if #[cfg(target_family= "wasm")] {
-            let client_id = rand::random::<u64>();
+        if #[cfg(any(target_family= "wasm", target_os="ios"))] {
+            let client_id = random::<u64>();
             Cli {
                 mode: Some(Mode::Client {
                     client_id: Some(client_id),
@@ -275,7 +280,15 @@ pub fn log_plugin() -> LogPlugin {
 
 #[cfg(feature = "gui")]
 pub fn new_gui_app(add_inspector: bool) -> App {
+    #[allow(unused_imports)]
+    use bevy::winit::WinitPlugin;
+
+    #[cfg(target_os = "ios")]
+    use std::default;
+
     let mut app = App::new();
+
+    #[cfg(not(target_os = "ios"))]
     app.add_plugins(
         DefaultPlugins
             .build()
@@ -287,6 +300,19 @@ pub fn new_gui_app(add_inspector: bool) -> App {
             .set(log_plugin())
             .set(window_plugin()),
     );
+
+    #[allow(unused_mut)]
+    let mut default_plugins = DefaultPlugins.build();
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        default_plugins = default_plugins
+            .disable::<WinitPlugin>()
+            .set(WindowPlugin::default());
+
+        app.insert_resource(ClearColor(Color::srgb(0.8, 0.4, 0.6)))
+            .add_plugins(default_plugins);
+    }
 
     #[cfg(feature = "visualizer")]
     {

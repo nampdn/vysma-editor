@@ -1,5 +1,6 @@
+use bevy::ecs::entity::MapEntities;
 use bevy::prelude::*;
-use bevy::{ecs::entity::MapEntities, input::InputPlugin};
+use lightyear::input::native::plugin::InputPlugin;
 use lightyear::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -76,7 +77,7 @@ impl Plugin for ProtocolPlugin {
         app.register_type::<Inputs>();
 
         // inputs
-        // app.add_plugins(InputPlugin::default());
+        // app.add_plugins(InputPlugin::<Inputs>::default());
 
         // components
         app.register_component::<PlayerId>()

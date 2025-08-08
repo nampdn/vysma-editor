@@ -10,6 +10,7 @@ use bevy::input::{
     ButtonState,
     keyboard::{Key, KeyboardInput},
 };
+use core::time::Duration;
 
 #[cfg(any(target_os = "android", target_os = "ios"))]
 mod app_view;
@@ -90,7 +91,7 @@ pub fn create_breakout_app(
     #[cfg(any(target_os = "android", target_os = "ios"))]
     bevy_app.add_plugins(app_view::AppViewPlugin);
 
-    bevy_app.add_plugins(breakout_game::BreakoutGamePlugin);
+    // bevy_app.add_plugins(breakout_game::BreakoutGamePlugin);
     // bevy_app.add_plugins(lighting_demo::LightingDemoPlugin);
     // bevy_app.add_plugins(shapes_demo::ShapesDemoPlugin);
 
@@ -107,6 +108,59 @@ pub fn create_breakout_app(
     }
 
     bevy_app
+}
+
+// #[cfg(any(target_os = "android", target_os = "ios"))]
+pub fn create_client_app() -> App {
+    // use bevy::prelude::*;
+    use crate::client::VysmaClientPlugin;
+    use crate::common::{
+        cli::Cli,
+        shared::{FIXED_TIMESTEP_HZ, SEND_INTERVAL},
+    };
+    use crate::renderer::RendererPlugin;
+    use crate::shared::SharedPlugin;
+    use lightyear::prelude::{Client, ReplicationSender, SendUpdatesMode};
+
+    let cli = Cli::default();
+    // You may want to parameterize this as needed for your iOS entrypoint
+    // let mut app = App::new();
+    let mut app = cli.build_app(Duration::from_secs_f64(1.0 / FIXED_TIMESTEP_HZ), false);
+
+    cli.spawn_connections(&mut app);
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    app.add_plugins(app_view::AppViewPlugin);
+
+    app.add_plugins(SharedPlugin);
+    app.add_plugins(VysmaClientPlugin);
+
+    // Set up ReplicationSender for the client entity
+    let client_entity = app
+        .world_mut()
+        .query_filtered::<Entity, With<Client>>()
+        .single(app.world_mut())
+        .unwrap();
+    app.world_mut()
+        .entity_mut(client_entity)
+        .insert(ReplicationSender::new(
+            SEND_INTERVAL,
+            SendUpdatesMode::SinceLastAck,
+            false,
+        ));
+
+    // Add renderer if needed (e.g. for GUI)
+    app.add_plugins(RendererPlugin);
+
+    #[cfg(any(target_os = "android", target_os = "ios"))]
+    {
+        use bevy::app::PluginsState;
+        if app.plugins_state() == PluginsState::Ready {}
+        app.finish();
+        app.cleanup();
+    }
+
+    app
 }
 
 #[cfg(any(target_os = "android", target_os = "ios"))]

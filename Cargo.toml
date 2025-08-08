@@ -16,7 +16,8 @@ crate-type = ["rlib", "staticlib", "cdylib"]
 client = ["lightyear/client", "gui"]
 default = ["bevy_debug_stepping", "client", "server", "gui"]
 bevy_debug_stepping = ["bevy/bevy_debug_stepping"]
-server = ["lightyear/server"]
+server = ["lightyear/server", "udp"]
+udp = ["lightyear/udp"]
 
 gui = [
     "bevy/bevy_asset",
@@ -67,6 +68,8 @@ serde = { version = "1", default-features = false, features = [
     "derive",
 ] }
 
+async-compat = "0.2.3"
+tracing = "0.1.40"
 clap = { version = "4.5.4", features = ["derive"] }
 bevy-inspector-egui = { version = "0.32", default-features = false, features = [
     "bevy_pbr",
@@ -75,6 +78,7 @@ bevy-inspector-egui = { version = "0.32", default-features = false, features = [
     "egui_open_url",
 ] }
 cfg-if = "1.0"
+rand = "0.9.2"
 
 [target.'cfg(target_os = "ios")'.dependencies]
 core-graphics = "*"
