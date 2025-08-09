@@ -1,20 +1,29 @@
 use crate::protocol::*;
 use bevy::app::Plugin;
+use bevy::input::mouse::MouseButton;
+use bevy::input::touch::{TouchInput, TouchPhase};
 use bevy::prelude::*;
-use core::time::Duration;
 use lightyear::input::native::prelude::*;
 use lightyear::prelude::client::input::InputSet;
 use lightyear::prelude::*;
 
 use crate::protocol::Direction;
-use crate::protocol::*;
 use crate::shared::{color_from_id, shared_movement_behaviour};
+use crate::InputBindingExt;
 
 pub struct VysmaClientPlugin;
 
 impl Plugin for VysmaClientPlugin {
     fn build(&self, app: &mut bevy::app::App) {
         app.add_observer(spawn_local_cursor);
+
+        // Add the comprehensive input binding system
+        // app.add_plugins(InputBindingPlugin);
+
+        // Setup default touch bindings for iOS/Android
+        #[cfg(any(target_os = "ios", target_os = "android"))]
+        app.setup_default_touch_bindings();
+
         // Inputs need to be buffered in the `FixedPreUpdate` schedule
         app.add_systems(
             FixedPreUpdate,
@@ -22,7 +31,10 @@ impl Plugin for VysmaClientPlugin {
         );
         // all actions related-system that can be rolled back should be in the `FixedUpdate` schedule
         app.add_systems(FixedUpdate, (player_movement));
-        app.add_systems(Update, (cursor_movement, spawn_player));
+        app.add_systems(
+            Update,
+            (cursor_movement, touch_cursor_movement, spawn_player, spawn_player_on_click),
+        );
         app.add_observer(handle_predicted_spawn);
         app.add_observer(handle_interpolated_spawn);
     }
@@ -129,6 +141,62 @@ fn spawn_player(
     }
 }
 
+/// Spawn a client-owned player entity when mouse is clicked
+fn spawn_player_on_click(
+    mut commands: Commands,
+    mouse_button: Res<ButtonInput<MouseButton>>,
+    client: Single<&LocalId, With<Client>>,
+    players: Query<&PlayerId, With<PlayerPosition>>,
+    window_query: Query<&Window>,
+) {
+    if mouse_button.just_pressed(MouseButton::Left) {
+        let client_id = client.into_inner().0;
+        // do not spawn a new player if we already have one
+        for player_id in players.iter() {
+            if player_id.0 == client_id {
+                return;
+            }
+        }
+
+        // Get cursor position for spawning
+        let spawn_position = if let Ok(window) = window_query.single() {
+            if let Some(mouse_position) = window_relative_mouse_position(window) {
+                mouse_position
+            } else {
+                Vec2::ZERO
+            }
+        } else {
+            Vec2::ZERO
+        };
+
+        info!(
+            "Spawning client-owned player entity for client: {} at position {:?}",
+            client_id, spawn_position
+        );
+        commands.spawn((
+            Name::from("Player"),
+            PlayerId(client_id),
+            PlayerPosition(spawn_position),
+            PlayerColor(color_from_id(client_id)),
+            Replicate::to_server(),
+            // IMPORTANT: this lets the server know that the entity is pre-predicted
+            // when the server replicates this entity; we will get a Confirmed entity
+            // which will use this entity as the Predicted version
+            PrePredicted::default(),
+        ));
+    }
+}
+
+// Get the cursor position relative to the window
+fn window_relative_mouse_position(window: &Window) -> Option<Vec2> {
+    let cursor_pos = window.cursor_position()?;
+
+    Some(Vec2::new(
+        cursor_pos.x - (window.width() / 2.0),
+        -(cursor_pos.y - (window.height() / 2.0)),
+    ))
+}
+
 // Adjust the movement of the cursor entity based on the mouse position
 fn cursor_movement(
     client: Single<&LocalId, (With<Connected>, With<Client>)>,
@@ -154,14 +222,37 @@ fn cursor_movement(
     }
 }
 
-// Get the cursor position relative to the window
-fn window_relative_mouse_position(window: &Window) -> Option<Vec2> {
-    let cursor_pos = window.cursor_position()?;
+// Adjust the movement of the cursor entity based on touch input for touch devices
+fn touch_cursor_movement(
+    client: Single<&LocalId, (With<Connected>, With<Client>)>,
+    window_query: Query<&Window>,
+    mut touch_events: EventReader<TouchInput>,
+    mut cursor_query: Query<
+        (&mut CursorPosition, &PlayerId),
+        // Query the client-authoritative cursor
+        (Without<Confirmed>, Without<Interpolated>),
+    >,
+) {
+    let client_id = client.into_inner().0;
 
-    Some(Vec2::new(
-        cursor_pos.x - (window.width() / 2.0),
-        -(cursor_pos.y - (window.height() / 2.0)),
-    ))
+    // Process touch events
+    for event in touch_events.read() {
+        // Only handle TouchMove events for cursor movement
+        if event.phase == TouchPhase::Moved {
+            if let Ok(window) = window_query.single() {
+                let centered = Vec2::new(
+                    event.position.x - (window.width() / 2.0),
+                    -(event.position.y - (window.height() / 2.0)),
+                );
+                for (mut cursor_position, player_id) in cursor_query.iter_mut() {
+                    if player_id.0 != client_id {
+                        continue;
+                    }
+                    cursor_position.set_if_neq(CursorPosition(centered));
+                }
+            }
+        }
+    }
 }
 
 /// When the predicted copy of the client-owned entity is spawned, do stuff

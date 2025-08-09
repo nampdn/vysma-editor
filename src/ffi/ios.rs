@@ -56,6 +56,7 @@ fn touched(obj: *mut libc::c_void, phase: TouchPhase, position: Vec2) {
         SystemState::from_world(app.world_mut());
     let (entity, _) = windows_system_state.get(app.world_mut()).single().unwrap();
 
+    // Send touch event
     let touch = TouchInput {
         window: entity,
         phase,
@@ -63,8 +64,21 @@ fn touched(obj: *mut libc::c_void, phase: TouchPhase, position: Vec2) {
         force: None,
         id: 0,
     };
-
     app.world_mut().send_event(touch);
+
+    // Update cursor position for touch events
+    match phase {
+        TouchPhase::Started | TouchPhase::Moved => {
+            // Send cursor moved event to update cursor position
+            let cursor_moved = CursorMoved {
+                window: entity,
+                position,
+                delta: Some(Vec2::ZERO), // No delta for touch events
+            };
+            app.world_mut().send_event(cursor_moved);
+        }
+        _ => {}
+    }
 }
 
 #[unsafe(no_mangle)]

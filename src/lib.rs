@@ -20,6 +20,8 @@ mod ffi;
 #[cfg(any(target_os = "android", target_os = "ios"))]
 pub use ffi::*;
 
+pub use input_binding::*;
+
 #[cfg(target_os = "android")]
 mod android_asset_io;
 
@@ -33,6 +35,7 @@ pub mod server;
 mod shapes_demo;
 pub mod shared;
 mod stepping;
+mod input_binding;
 
 #[allow(unused_variables)]
 pub fn create_breakout_app(
