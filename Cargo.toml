@@ -43,6 +43,11 @@ gui = [
 ]
 
 [dependencies]
+ahash = "0.8"
+smallvec = "1"
+thiserror = "1"
+indexmap = { version = "2", features = ["serde"] }
+# hcl-rs = { version = "0.19.2" }
 libc = "*"
 raw-window-handle = "0.6"
 wgpu = "24"
@@ -63,10 +68,12 @@ lightyear = { version = "0.22.5", features = [
     "netcode",
 ] }
 
+
 serde = { version = "1", default-features = false, features = [
     "alloc",
     "derive",
 ] }
+serde_json = "1"
 
 async-compat = "0.2.3"
 tracing = "0.1.40"
@@ -79,6 +86,8 @@ bevy-inspector-egui = { version = "0.32", default-features = false, features = [
 ] }
 cfg-if = "1.0"
 rand = "0.9.2"
+hcl-rs = "0.19.2"
+anyhow = "1"
 
 [target.'cfg(target_os = "ios")'.dependencies]
 core-graphics = "*"
@@ -92,6 +101,7 @@ ndk-sys = "0.6.0+11769913"
 ndk = "0.9.0"
 ndk-context = "*"
 log-panics = "*"
+
 
 [profile.dev]
 opt-level = 1 # 1 for minimal optimization and good debugging.

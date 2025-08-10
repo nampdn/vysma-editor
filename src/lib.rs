@@ -25,6 +25,7 @@ pub use input_binding::*;
 #[cfg(target_os = "android")]
 mod android_asset_io;
 
+pub mod hcl;
 mod breakout_game;
 pub mod client;
 pub mod common;
