@@ -249,11 +249,12 @@ use crate::hcl::{
 };
 use ahash::AHashMap as HashMap;
 use bevy::prelude::*;
-use bevy::asset::AssetId;
+#[cfg(feature = "remote_assets")]
+use reqwest::blocking as http;
 
 #[derive(Resource, Default)]
 pub struct SceneSpawner {
-    spawned_roots: HashMap<AssetId<HclSceneAsset>, Entity>,
+    spawned_roots: HashMap<Handle<HclSceneAsset>, Entity>,
 }
 
 #[derive(Event)]
@@ -272,7 +273,7 @@ pub fn spawn_ready(
 ) {
     if let Some(entry) = entry {
         if let Some(h) = &entry.0 {
-            if spawner.spawned_roots.contains_key(&h.id()) {
+            if spawner.spawned_roots.contains_key(h) {
                 return;
             }
             if let Some(doc) = assets.get(h) {
@@ -285,7 +286,7 @@ pub fn spawn_ready(
                     &mut materials,
                     doc,
                 );
-                spawner.spawned_roots.insert(h.id(), root);
+                spawner.spawned_roots.insert(h.clone(), root);
             }
         }
     }
@@ -304,8 +305,8 @@ pub fn hot_reload(
 ) {
     for ev in events.read() {
         if let AssetEvent::Modified { id } = ev {
-            if let Some(prev_root) = spawner.spawned_roots.remove(id) {
-                // 0.16: simple despawn will remove children via built-in relationships
+            let handle = Handle::<HclSceneAsset>::Weak(*id);
+            if let Some(prev_root) = spawner.spawned_roots.remove(&handle) {
                 commands.entity(prev_root).despawn();
             }
             if let Some(doc) = assets.get(*id) {
@@ -318,7 +319,7 @@ pub fn hot_reload(
                     &mut materials,
                     doc,
                 );
-                spawner.spawned_roots.insert(*id, root);
+                spawner.spawned_roots.insert(handle, root);
             }
         }
     }
@@ -341,7 +342,6 @@ fn spawn_scene(
         doc.doc.assets.as_ref(),
     );
 
-    // Prefabs map: &str -> &serde_json::Value
     let mut prefab_map: HashMap<&str, &serde_json::Value> = HashMap::default();
     for p in &doc.doc.prefab {
         prefab_map.insert(p.name.as_str(), &p.components);
@@ -377,13 +377,8 @@ fn build_assets_cache(
             if let MeshKind::Builtin { builtin } = &m.kind {
                 let mesh = match builtin.as_str() {
                     "cube" => Mesh::from(shape::Cuboid { half_size: Vec3::splat(0.5) }),
-                    "plane" => {
-                        Mesh::from(shape::Plane3d { normal: bevy::math::Dir3::Y, half_size: Vec2::splat(0.5) })
-                    }
-                    "quad" => {
-                        // Approximate quad as a small plane
-                        Mesh::from(shape::Plane3d { normal: bevy::math::Dir3::Y, half_size: Vec2::splat(0.5) })
-                    }
+                    "plane" => Mesh::from(shape::Plane3d { normal: bevy::math::Dir3::Y, half_size: Vec2::splat(0.5) }),
+                    "quad" => Mesh::from(shape::Plane3d { normal: bevy::math::Dir3::Y, half_size: Vec2::splat(0.5) }),
                     other => {
                         warn!("Unknown builtin mesh {other}, defaulting box");
                         Mesh::from(shape::Cuboid { half_size: Vec3::splat(0.5) })
@@ -414,12 +409,18 @@ fn build_assets_cache(
             ctx.materials.insert(mat.name.clone(), h);
         }
         for img in &assets.image {
-            ctx.images
-                .insert(img.name.clone(), asset_server.load(img.file.as_str()));
+            let mut path = img.file.clone();
+            if is_http(&path) {
+                if let Some(local) = fetch_to_assets_cache(&path) { path = local; }
+            }
+            ctx.images.insert(img.name.clone(), asset_server.load(path));
         }
         for sc in &assets.gltf {
-            ctx.scenes
-                .insert(sc.name.clone(), asset_server.load(sc.file.as_str()));
+            let mut path = sc.file.clone();
+            if is_http(&path) {
+                if let Some(local) = fetch_to_assets_cache(&path) { path = local; }
+            }
+            ctx.scenes.insert(sc.name.clone(), asset_server.load(path));
         }
     }
 }
@@ -435,12 +436,11 @@ fn spawn_recursive(
     let mut ec = commands.spawn_empty();
     if let Some(p) = parent {
         ec.insert(ChildOf(p));
-    } // 0.16 relationship API
+    }
     if let Some(n) = &decl.name {
         ec.insert(Name::new(n.clone()));
     }
 
-    // Merge prefab components → local override (stable order)
     let mut merged = serde_json::json!({});
     for inc in &decl.include {
         if let Some(p) = prefabs.get(inc.as_str()) {
@@ -449,9 +449,7 @@ fn spawn_recursive(
     }
     merge_json(&mut merged, decl.components.clone());
 
-    // Apply in priority order for determinism & dependency handling
     if let Some(obj) = merged.as_object() {
-        // Collect keys, look up appliers, then sort by priority
         let mut items: Vec<(&str, &Box<dyn ComponentApplier>)> = Vec::with_capacity(obj.len());
         for k in obj.keys() {
             if let Some(a) = registry.get(k) {
@@ -484,4 +482,38 @@ fn merge_json(dst: &mut serde_json::Value, src: serde_json::Value) {
         }
         (d, s) => *d = s,
     }
+}
+
+fn is_http(path: &str) -> bool {
+    path.starts_with("http://") || path.starts_with("https://")
+}
+
+fn fetch_to_assets_cache(url: &str) -> Option<String> {
+    #[cfg(feature = "remote_assets")]
+    {
+        let Ok(bytes) = http::get(url).and_then(|r| r.error_for_status()).and_then(|mut r| r.bytes().map_err(|e| e.into())) else {
+            warn!("Failed to fetch remote asset: {url}");
+            return None;
+        };
+        let hash = sha256_hex(url);
+        let ext = std::path::Path::new(url)
+            .extension()
+            .and_then(|s| s.to_str())
+            .unwrap_or("bin");
+        let rel = format!("_remote_cache/{}.{}", hash, ext);
+        let out_path = std::path::Path::new("assets").join(&rel);
+        if let Some(parent) = out_path.parent() { let _ = std::fs::create_dir_all(parent); }
+        if std::fs::write(&out_path, &bytes).is_ok() { return Some(rel); }
+        warn!("Failed to write cached asset: {}", out_path.display());
+        None
+    }
+    #[cfg(not(feature = "remote_assets"))]
+    { None }
+}
+
+fn sha256_hex(s: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(s.as_bytes());
+    format!("{:x}", h.finalize())
 }

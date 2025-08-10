@@ -1,5 +1,6 @@
 use ahash::AHashMap as HashMap;
 use bevy::prelude::*;
+use bevy::scene::Scene;
 use serde::de::DeserializeOwned;
 
 use crate::hcl::schema::{ColorDef, TransformDef};
@@ -293,11 +294,37 @@ impl ComponentApplier for PointLightApplier {
     }
 }
 
+pub struct SceneRefApplier;
+impl ComponentApplier for SceneRefApplier {
+    fn key(&self) -> &'static str { "SceneRef" }
+    fn apply(
+        &self,
+        payload: &Json,
+        entity: &mut EntityCommands,
+        _scratch: &mut EntityScratch,
+        ctx: &mut ApplyCtx,
+    ) -> anyhow::Result<()> {
+        let scene_name = payload
+            .get("scene")
+            .and_then(|s| s.as_str())
+            .ok_or_else(|| anyhow::anyhow!("SceneRef.scene missing"))?;
+        let scene = ctx
+            .scenes
+            .get(scene_name)
+            .cloned()
+            .ok_or_else(|| anyhow::anyhow!("Unknown scene {scene_name}"))?;
+        // Bevy 0.16: spawn scene root via SceneRoot
+        entity.insert(bevy::scene::SceneRoot(scene));
+        Ok(())
+    }
+}
+
 // Register defaults
 impl DefaultStdComponents {
     pub fn register(reg: &mut ComponentRegistry) {
         reg.register(StandardMaterialRefApplier);
         reg.register(MeshRefApplier);
+        reg.register(SceneRefApplier);
         reg.register(TransformApplier);
         reg.register(NameApplier);
         reg.register(VisibilityApplier);

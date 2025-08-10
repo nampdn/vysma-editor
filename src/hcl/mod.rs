@@ -2,10 +2,11 @@ mod loader;
 mod registry;
 mod schema;
 mod spawn;
+pub mod net;
 
 use bevy::prelude::*;
 use loader::HclSceneAsset;
-use registry::{ComponentRegistry, DefaultStdComponents};
+use registry::{ApplyCtx, ComponentRegistry, DefaultStdComponents};
 use spawn::SceneSpawner;
 
 pub struct HclPlugin;
@@ -15,11 +16,13 @@ impl Plugin for HclPlugin {
         app.init_asset::<HclSceneAsset>();
         app.init_asset_loader::<loader::HclLoader>();
         app.init_resource::<ComponentRegistry>();
+        app.init_resource::<ApplyCtx>();
         app.init_resource::<SceneSpawner>();
         app.add_event::<spawn::RespawnRequest>();
         app.add_systems(PreUpdate, spawn::hot_reload);
         app.add_systems(Update, spawn::spawn_ready);
         app.add_plugins(DefaultStdComponents);
+        app.add_plugins(net::HclNetPlugin);
     }
 }
 
@@ -29,7 +32,7 @@ pub struct HclEntry(pub Option<Handle<HclSceneAsset>>);
 
 pub fn load_scene_at_startup(
     path: &str,
-) -> impl FnOnce(Commands, Res<AssetServer>) + 'static {
+) -> impl FnMut(Commands, Res<AssetServer>) + 'static {
     let path = path.to_owned();
     move |mut commands: Commands, assets: Res<AssetServer>| {
         commands.insert_resource(HclEntry(Some(assets.load::<HclSceneAsset>(path.as_str()))));

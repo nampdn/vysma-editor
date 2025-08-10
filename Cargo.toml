@@ -19,6 +19,9 @@ bevy_debug_stepping = ["bevy/bevy_debug_stepping"]
 server = ["lightyear/server", "udp"]
 udp = ["lightyear/udp"]
 
+# Optional toggle to enable remote asset helpers (future use)
+remote_assets = []
+
 gui = [
     "bevy/bevy_asset",
     "bevy/bevy_render",
@@ -88,6 +91,9 @@ cfg-if = "1.0"
 rand = "0.9.2"
 hcl-rs = "0.19.2"
 anyhow = "1"
+sha2 = "0.10"
+# Optional: future remote assets fetching support
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking"], optional = true }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 core-graphics = "*"

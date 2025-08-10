@@ -26,6 +26,12 @@ fn main() {
 
     let mut app = cli.build_app(Duration::from_secs_f64(1.0 / FIXED_TIMESTEP_HZ), true);
     app.add_plugins(SharedPlugin);
+    // HCL: add plugin and load a more complex scene at startup
+    app.add_plugins(bevy_in_app::hcl::HclPlugin);
+    app.add_systems(
+        Startup,
+        bevy_in_app::hcl::load_scene_at_startup("scenes/example.hcl"),
+    );
     cli.spawn_connections(&mut app);
 
     match cli.mode {

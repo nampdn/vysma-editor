@@ -13,7 +13,7 @@ impl Plugin for RendererPlugin {
 }
 
 fn init(mut commands: Commands) {
-    commands.spawn(Camera2d);
+    // commands.spawn(Camera2d);
 }
 
 /// System that draws the player's boxes and cursors
