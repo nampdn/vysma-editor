@@ -90,6 +90,8 @@ fn spawn_scene(
             Name::new("HCLRoot"),
             Transform::default(),
             GlobalTransform::default(),
+            Visibility::Inherited,
+            InheritedVisibility::default(),
         ))
         .id();
     for e in &doc.doc.entity {
@@ -171,7 +173,12 @@ pub(crate) fn spawn_recursive(
     ctx: &mut ApplyCtx,
     prefabs: &HashMap<&str, &serde_json::Value>,
 ) {
-    let mut ec = commands.spawn_empty();
+    let mut ec = commands.spawn((
+        Transform::default(),
+        GlobalTransform::default(),
+        Visibility::Inherited,
+        InheritedVisibility::default(),
+    ));
     if let Some(p) = parent {
         ec.insert(ChildOf(p));
     }

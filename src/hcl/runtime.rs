@@ -104,6 +104,7 @@ fn compile_event(ev: &EventDef) -> Option<EventMatcher> {
 
 fn parse_key_code(s: &str) -> Option<KeyCode> {
     use KeyCode::*;
+    let s = s.trim();
     Some(match s {
         "Space" => Space,
         "Enter" => Enter,
@@ -112,10 +113,11 @@ fn parse_key_code(s: &str) -> Option<KeyCode> {
         "ArrowRight" => ArrowRight,
         "ArrowUp" => ArrowUp,
         "ArrowDown" => ArrowDown,
-        "KeyW" | "W" => KeyW,
-        "KeyA" | "A" => KeyA,
-        "KeyS" | "S" => KeyS,
-        "KeyD" | "D" => KeyD,
+        "KeyW" | "W" | "w" => KeyW,
+        "KeyA" | "A" | "a" => KeyA,
+        "KeyS" | "S" | "s" => KeyS,
+        "KeyD" | "D" | "d" => KeyD,
+        "KeyE" | "E" | "e" => KeyE,
         other => { warn!("Unknown KeyCode: {other}"); return None; }
     })
 }
