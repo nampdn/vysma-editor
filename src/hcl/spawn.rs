@@ -1,7 +1,7 @@
 use crate::hcl::{
     loader::HclSceneAsset,
     registry::{ApplyCtx, ComponentApplier, ComponentRegistry, EntityScratch},
-    schema::{AssetsBlock, EntityDecl, MeshKind},
+    schema::{AssetsBlock, EntityDecl, MeshKind, SceneDoc},
 };
 use ahash::AHashMap as HashMap;
 use bevy::prelude::*;
@@ -31,18 +31,17 @@ pub fn spawn_ready(
 ) {
     if let Some(entry) = entry {
         if let Some(h) = &entry.0 {
-            if spawner.spawned_roots.contains_key(h) {
-                return;
-            }
-            if let Some(doc) = assets.get(h) {
-                let root = spawn_scene(
+            if spawner.spawned_roots.contains_key(h) { return; }
+            if let Some(asset) = assets.get(h) {
+                let Some(doc) = merge_includes(&asset.doc, &asset_server, &assets) else { return; };
+                let root = spawn_from_doc(
                     &mut commands,
                     &registry,
                     &mut ctx,
                     &asset_server,
                     &mut meshes,
                     &mut materials,
-                    doc,
+                    &doc,
                 );
                 spawner.spawned_roots.insert(h.clone(), root);
             }
@@ -56,9 +55,7 @@ pub fn apply_persisted_state(
 ) {
     if store.0.is_empty() { return; }
     for (key, mut tf) in q.iter_mut() {
-        if let Some(saved) = store.0.get(&key.0) {
-            *tf = *saved;
-        }
+        if let Some(saved) = store.0.get(&key.0) { *tf = *saved; }
     }
     store.0.clear();
 }
@@ -80,232 +77,176 @@ pub fn hot_reload(
         if let bevy::asset::AssetEvent::Modified { id } = *ev {
             if let Some(handle) = asset_server.get_id_handle(id) {
                 if let Some(root) = spawner.spawned_roots.get(&handle) {
-                    // collect persisted state
                     persist.0.clear();
-                    for (tag, t) in q_persist.iter() {
-                        if let Some(tf) = t { persist.0.insert(tag.0.clone(), *tf); }
-                    }
-                    // despawn old
+                    for (tag, t) in q_persist.iter() { if let Some(tf) = t { persist.0.insert(tag.0.clone(), *tf); } }
                     commands.entity(*root).despawn_recursive();
                 }
-                // spawn new
-                if let Some(doc) = assets.get(&handle) {
-                    let new_root = spawn_scene(
+                if let Some(asset) = assets.get(&handle) {
+                    let Some(doc) = merge_includes(&asset.doc, &asset_server, &assets) else { continue; };
+                    let new_root = spawn_from_doc(
                         &mut commands,
                         &registry,
                         &mut ctx,
                         &asset_server,
                         &mut meshes,
                         &mut materials,
-                        doc,
+                        &doc,
                     );
                     spawner.spawned_roots.insert(handle.clone(), new_root);
-                    // reapply persisted transforms
-                    // We can't query after spawning inside this system easily without a frame; for simplicity rely on next frame system to apply.
                 }
             }
         }
     }
 }
 
-fn spawn_scene(
+fn spawn_from_doc(
     commands: &mut Commands,
-    registry: &ComponentRegistry,
-    ctx: &mut ApplyCtx,
-    asset_server: &AssetServer,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    doc: &HclSceneAsset,
+    registry: &Res<ComponentRegistry>,
+    ctx: &mut ResMut<ApplyCtx>,
+    asset_server: &Res<AssetServer>,
+    meshes: &mut ResMut<Assets<Mesh>>,
+    materials: &mut ResMut<Assets<StandardMaterial>>,
+    doc: &SceneDoc,
 ) -> Entity {
-    build_assets_cache(
-        ctx,
-        asset_server,
-        meshes,
-        materials,
-        doc.doc.assets.as_ref(),
-    );
-
-    let mut prefab_map: HashMap<&str, &serde_json::Value> = HashMap::default();
-    for p in &doc.doc.prefab {
-        prefab_map.insert(p.name.as_str(), &p.components);
-    }
-
-    let root = commands
-        .spawn((
-            Name::new("HCLRoot"),
-            Transform::default(),
-            GlobalTransform::default(),
-            Visibility::Inherited,
-            InheritedVisibility::default(),
-        ))
-        .id();
-    for e in &doc.doc.entity {
-        spawn_recursive(e, commands, Some(root), registry, ctx, &prefab_map);
-    }
-    root
-}
-
-fn build_assets_cache(
-    ctx: &mut ApplyCtx,
-    asset_server: &AssetServer,
-    meshes: &mut Assets<Mesh>,
-    materials: &mut Assets<StandardMaterial>,
-    assets: Option<&AssetsBlock>,
-) {
     ctx.meshes.clear();
     ctx.materials.clear();
     ctx.images.clear();
     ctx.scenes.clear();
-    if let Some(assets) = assets {
-        use bevy::math::primitives as shape;
-        for m in &assets.mesh {
-            if let MeshKind::Builtin { builtin } = &m.kind {
-                let mesh = match builtin.as_str() {
-                    "cube" => Mesh::from(shape::Cuboid { half_size: Vec3::splat(0.5) }),
-                    "plane" => Mesh::from(shape::Plane3d { normal: bevy::math::Dir3::Y, half_size: Vec2::splat(0.5) }),
-                    "quad" => Mesh::from(shape::Plane3d { normal: bevy::math::Dir3::Y, half_size: Vec2::splat(0.5) }),
-                    other => {
-                        warn!("Unknown builtin mesh {other}, defaulting box");
-                        Mesh::from(shape::Cuboid { half_size: Vec3::splat(0.5) })
-                    }
-                };
-                let h = meshes.add(mesh);
-                ctx.meshes.insert(m.name.clone(), h);
-            }
+
+    if let Some(assets) = &doc.assets { load_assets(assets, ctx, asset_server, meshes, materials); }
+
+    // Build prefab map for includes
+    let mut prefabs: HashMap<String, serde_json::Value> = HashMap::default();
+    for p in &doc.prefab { prefabs.insert(p.name.clone(), p.components.clone()); }
+
+    let root = commands
+        .spawn((
+            Name::new("HCL Root"),
+            HclTags::default(),
+            Transform::default(),
+            GlobalTransform::default(),
+            Visibility::Visible,
+            InheritedVisibility::default(),
+        ))
+        .id();
+
+    let mut scratch = EntityScratch::default();
+    for ent in &doc.entity {
+        spawn_entity(commands, registry, ctx, &mut scratch, &prefabs, &ent, Some(root));
+    }
+
+    root
+}
+
+fn load_assets(
+    assets: &AssetsBlock,
+    ctx: &mut ApplyCtx,
+    _asset_server: &AssetServer,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+) {
+    for m in &assets.mesh {
+        if let MeshKind::Builtin { builtin } = &m.kind {
+            let mesh = match builtin.as_str() {
+                "cube" => Mesh::from(Cuboid::default()),
+                "plane" => Mesh::from(Plane3d::default()),
+                _ => Mesh::from(Cuboid::default()),
+            };
+            ctx.meshes.insert(m.name.clone(), meshes.add(mesh));
         }
-        for mat in &assets.material {
-            let mut std = StandardMaterial::default();
-            if let Some(pbr) = &mat.pbr {
-                use crate::hcl::registry::color_from_def;
-                if let Some(c) = &pbr.base_color {
-                    std.base_color = color_from_def(c);
-                }
-                if let Some(m) = pbr.metallic {
-                    std.metallic = m;
-                }
-                if let Some(r) = pbr.roughness {
-                    std.perceptual_roughness = r;
-                }
-                if let Some(e) = &pbr.emissive {
-                    std.emissive = crate::hcl::registry::color_from_def(e).to_linear();
-                }
-            }
-            let h = materials.add(std);
-            ctx.materials.insert(mat.name.clone(), h);
+    }
+    for mat in &assets.material {
+        let color = crate::hcl::registry::color_from_def(&mat.pbr.as_ref().and_then(|p| p.base_color.clone()).unwrap_or_default());
+        let mut m = StandardMaterial::from(color);
+        if let Some(p) = &mat.pbr {
+            if let Some(rough) = p.roughness { m.perceptual_roughness = rough; }
+            if let Some(metal) = p.metallic { m.metallic = metal; }
+            if let Some(em) = &p.emissive { m.emissive = crate::hcl::registry::color_from_def(em).into(); }
         }
-        for img in &assets.image {
-            let mut path = img.file.clone();
-            if is_http(&path) {
-                if let Some(local) = fetch_to_assets_cache(&path) { path = local; }
-            }
-            ctx.images.insert(img.name.clone(), asset_server.load(path));
-        }
-        for sc in &assets.gltf {
-            let mut path = sc.file.clone();
-            if is_http(&path) {
-                if let Some(local) = fetch_to_assets_cache(&path) { path = local; }
-            }
-            ctx.scenes.insert(sc.name.clone(), asset_server.load(path));
-        }
+        ctx.materials.insert(mat.name.clone(), materials.add(m));
+    }
+    if !ctx.materials.contains_key("__default") {
+        let default_handle = materials.add(StandardMaterial::default());
+        ctx.materials.insert("__default".to_string(), default_handle);
     }
 }
 
-pub(crate) fn spawn_recursive(
-    decl: &EntityDecl,
+fn build_appliers_ordered<'a>(registry: &'a Res<ComponentRegistry>) -> Vec<(&'static str, &'a Box<dyn ComponentApplier>)> {
+    let mut items: Vec<(&'static str, &Box<dyn ComponentApplier>)> = registry.iter().collect();
+    items.sort_by_key(|(_, a)| a.priority());
+    items
+}
+
+fn merge_json(dst: &mut serde_json::Value, src: &serde_json::Value) {
+    match (dst, src) {
+        (serde_json::Value::Object(d), serde_json::Value::Object(s)) => {
+            for (k, v) in s { merge_json(d.entry(k.clone()).or_insert(serde_json::Value::Null), v); }
+        }
+        (d, s) => *d = s.clone(),
+    }
+}
+
+fn spawn_entity(
     commands: &mut Commands,
+    registry: &Res<ComponentRegistry>,
+    ctx: &mut ResMut<ApplyCtx>,
+    scratch: &mut EntityScratch,
+    prefabs: &HashMap<String, serde_json::Value>,
+    ent: &EntityDecl,
     parent: Option<Entity>,
-    registry: &ComponentRegistry,
-    ctx: &mut ApplyCtx,
-    prefabs: &HashMap<&str, &serde_json::Value>,
-) {
+) -> Entity {
     let mut ec = commands.spawn((
+        Name::new(ent.name.clone().unwrap_or("Unnamed".into())),
+        HclTags(ent.tags.clone()),
         Transform::default(),
         GlobalTransform::default(),
-        Visibility::Inherited,
+        Visibility::Visible,
         InheritedVisibility::default(),
     ));
-    if let Some(p) = parent {
-        ec.insert(ChildOf(p));
-    }
-    if let Some(n) = &decl.name {
-        ec.insert(Name::new(n.clone()));
-    }
-    if !decl.tags.is_empty() { ec.insert(HclTags(decl.tags.clone())); }
-    if let Some(k) = &decl.persist_key { ec.insert(HclPersistent(k.clone())); }
+    if let Some(p) = parent { ec.insert(ChildOf(p)); }
 
+    // Merge components from includes and overrides
     let mut merged = serde_json::json!({});
-    for inc in &decl.include {
-        if let Some(p) = prefabs.get(inc.as_str()) {
-            merge_json(&mut merged, (*p).clone());
-        }
+    for inc in &ent.include {
+        if let Some(p) = prefabs.get(inc) { merge_json(&mut merged, p); }
     }
-    merge_json(&mut merged, decl.components.clone());
+    merge_json(&mut merged, &ent.components);
 
+    // Apply components in registry priority order
+    let appliers = build_appliers_ordered(registry);
     if let Some(obj) = merged.as_object() {
-        let mut items: Vec<(&str, &Box<dyn ComponentApplier>)> = Vec::with_capacity(obj.len());
-        for k in obj.keys() {
-            if let Some(a) = registry.get(k) {
-                items.push((k.as_str(), a));
-            }
-        }
-        items.sort_by_key(|(_, a)| a.priority());
-
-        let mut scratch = EntityScratch::default();
-        for (k, a) in items {
-            if let Some(v) = obj.get(k) {
-                a.apply(v, &mut ec, &mut scratch, ctx)
-                    .unwrap_or_else(|e| warn!("apply {k} failed: {e}"));
+        for (key, applier) in appliers {
+            if let Some(payload) = obj.get(key) {
+                let _ = applier.apply(payload, &mut ec, scratch, ctx);
             }
         }
     }
 
     let id = ec.id();
-    for c in &decl.children {
-        spawn_recursive(c, commands, Some(id), registry, ctx, prefabs);
+    for c in &ent.children { spawn_entity(commands, registry, ctx, scratch, prefabs, c, Some(id)); }
+    id
+}
+
+pub fn merge_includes(doc: &SceneDoc, asset_server: &AssetServer, assets: &Assets<HclSceneAsset>) -> Option<SceneDoc> {
+    if doc.includes.is_empty() { return Some(doc.clone()); }
+    let mut merged = SceneDoc { assets: doc.assets.clone(), prefab: doc.prefab.clone(), entity: doc.entity.clone(), triggers: doc.triggers.clone(), vars: doc.vars.clone(), includes: doc.includes.clone(), modules: doc.modules.clone(), exports: doc.exports.clone() };
+    for inc in &doc.includes {
+        let h = asset_server.load::<HclSceneAsset>(inc.as_str());
+        if let Some(dep) = assets.get(&h) { merge_doc_into(&mut merged, &dep.doc); } else { return None; }
     }
+    Some(merged)
 }
 
-fn merge_json(dst: &mut serde_json::Value, src: serde_json::Value) {
-    match (dst, src) {
-        (serde_json::Value::Object(d), serde_json::Value::Object(s)) => {
-            for (k, v) in s {
-                merge_json(d.entry(k).or_insert(serde_json::Value::Null), v);
-            }
-        }
-        (d, s) => *d = s,
+pub fn merge_doc_into(dst: &mut SceneDoc, src: &SceneDoc) {
+    if let Some(a) = &src.assets {
+        let dst_assets = dst.assets.get_or_insert(AssetsBlock::default());
+        dst_assets.mesh.extend_from_slice(&a.mesh);
+        dst_assets.material.extend_from_slice(&a.material);
+        dst_assets.image.extend_from_slice(&a.image);
+        dst_assets.gltf.extend_from_slice(&a.gltf);
     }
-}
-
-fn is_http(path: &str) -> bool {
-    path.starts_with("http://") || path.starts_with("https://")
-}
-
-fn fetch_to_assets_cache(url: &str) -> Option<String> {
-    #[cfg(feature = "remote_assets")]
-    {
-        let Ok(bytes) = http::get(url).and_then(|r| r.error_for_status()).and_then(|mut r| r.bytes().map_err(|e| e.into())) else {
-            warn!("Failed to fetch remote asset: {url}");
-            return None;
-        };
-        let hash = sha256_hex(url);
-        let ext = std::path::Path::new(url)
-            .extension()
-            .and_then(|s| s.to_str())
-            .unwrap_or("bin");
-        let rel = format!("_remote_cache/{}.{}", hash, ext);
-        let out_path = std::path::Path::new("assets").join(&rel);
-        if let Some(parent) = out_path.parent() { let _ = std::fs::create_dir_all(parent); }
-        if std::fs::write(&out_path, &bytes).is_ok() { return Some(rel); }
-        warn!("Failed to write cached asset: {}", out_path.display());
-        None
-    }
-    #[cfg(not(feature = "remote_assets"))]
-    { None }
-}
-
-fn sha256_hex(s: &str) -> String {
-    use sha2::{Digest, Sha256};
-    let mut h = Sha256::new();
-    h.update(s.as_bytes());
-    format!("{:x}", h.finalize())
+    dst.prefab.extend_from_slice(&src.prefab);
+    dst.entity.extend_from_slice(&src.entity);
+    dst.triggers.extend_from_slice(&src.triggers);
+    for (k, v) in &src.vars { dst.vars.insert(k.clone(), *v); }
 }

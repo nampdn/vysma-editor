@@ -5,12 +5,18 @@ mod spawn;
 mod runtime;
 mod types;
 pub mod net;
+mod module_registry;
+mod module_loader;
+mod moba_components;
 
 use bevy::prelude::*;
 use loader::HclSceneAsset;
 use registry::{ApplyCtx, ComponentRegistry, DefaultStdComponents};
 use spawn::SceneSpawner;
 use runtime::{HclRuntime, process_triggers};
+use module_registry::{ModuleRegistry, ModuleRegistryPlugin};
+use module_loader::{ModuleLoader, ModuleLoaderPlugin};
+use moba_components::*;
 
 pub struct HclPlugin;
 
@@ -28,7 +34,21 @@ impl Plugin for HclPlugin {
         app.add_systems(Update, (spawn::spawn_ready, process_triggers, spawn::apply_persisted_state));
         app.add_plugins(DefaultStdComponents);
         app.add_plugins(net::HclNetPlugin);
+        app.add_plugins(ModuleRegistryPlugin);
+        app.add_plugins(ModuleLoaderPlugin);
+        
+        // Register MOBA components
+        app.add_systems(Startup, register_moba_components);
     }
+}
+
+/// Register all MOBA-specific component appliers
+fn register_moba_components(mut registry: ResMut<ComponentRegistry>) {
+    registry.register(HeroApplier);
+    registry.register(AbilityApplier);
+    registry.register(CombatApplier);
+    registry.register(TeamApplier);
+    registry.register(MovementApplier);
 }
 
 /// Convenience: load an HCL scene at startup and spawn when ready.
@@ -41,6 +61,17 @@ pub fn load_scene_at_startup(
     let path = path.to_owned();
     move |mut commands: Commands, assets: Res<AssetServer>| {
         commands.insert_resource(HclEntry(Some(assets.load::<HclSceneAsset>(path.as_str()))));
+    }
+}
+
+/// Load a module and register it with the module registry
+pub fn load_module_at_startup(
+    module_name: String,
+    path: String,
+) -> impl FnMut(Res<AssetServer>, ResMut<ModuleRegistry>, ResMut<ModuleLoader>) + 'static {
+    move |assets: Res<AssetServer>, _registry: ResMut<ModuleRegistry>, mut loader: ResMut<ModuleLoader>| {
+        let _handle = assets.load::<HclSceneAsset>(path.as_str());
+        loader.register_module_path(module_name.clone(), path.clone());
     }
 }
 

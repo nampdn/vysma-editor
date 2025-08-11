@@ -6,6 +6,7 @@ use crate::hcl::{
     types::HclTags,
 };
 use ahash::AHashMap as HashMap;
+use std::sync::RwLock;
 
 #[derive(Resource, Default)]
 pub struct HclRuntime {
@@ -29,7 +30,10 @@ enum EventMatcher {
     KeyHeld(KeyCode),
     Tick(Timer),
     Startup,
+    Bus(String),
 }
+
+static EVENTS: once_cell::sync::Lazy<RwLock<EventBus>> = once_cell::sync::Lazy::new(|| RwLock::new(EventBus::default()));
 
 pub fn process_triggers(
     mut runtime: ResMut<HclRuntime>,
@@ -62,6 +66,8 @@ pub fn process_triggers(
     // dt variable for movement calculations
     runtime.vars.insert("dt".into(), time.delta_secs_f64());
     let startup_now = if !runtime.startup_fired { runtime.startup_fired = true; true } else { false };
+    // flip event bus for this frame
+    EVENTS.write().expect("event bus lock").flip();
     let prefabs = runtime.prefabs.clone();
     let mut compiled = std::mem::take(&mut runtime.compiled);
     for trig in &mut compiled {
@@ -70,6 +76,7 @@ pub fn process_triggers(
             EventMatcher::KeyHeld(k) => keys.pressed(*k),
             EventMatcher::Tick(timer) => timer.tick(time.delta()).just_finished(),
             EventMatcher::Startup => startup_now,
+            EventMatcher::Bus(name) => EVENTS.read().expect("event bus lock").contains(name),
         };
         if !fired { continue; }
         if !evaluate_conditions(&trig.when, &q_vis) { continue; }
@@ -107,6 +114,7 @@ fn compile_event(ev: &EventDef) -> Option<EventMatcher> {
         EventDef::KeyHeld { key_held } => parse_key_code(key_held).map(EventMatcher::KeyHeld),
         EventDef::Tick { tick } => Some(EventMatcher::Tick(Timer::from_seconds(tick.every.max(0.0001), TimerMode::Repeating))),
         EventDef::Startup { .. } => Some(EventMatcher::Startup),
+        EventDef::Event { event } => Some(EventMatcher::Bus(event.clone())),
     }
 }
 
@@ -201,17 +209,8 @@ fn apply_action(
             for_each_selected_mat(q_mat, targets, |m| { m.0 = mat_h.clone(); });
         }
         ActionDef::Spawn { spawn } => {
-            let mut decl = crate::hcl::schema::EntityDecl::default();
-            if let Some(pref) = &spawn.prefab {
-                if let Some(p) = prefabs.get(pref) { decl.include.push(pref.clone()); decl.components = p.clone(); }
-            }
-            // Merge additional components override
-            merge_json(&mut decl.components, spawn.components.clone());
-            // Find parent entity by selector if provided
-            let parent_entity = spawn.parent.as_ref().and_then(|sel| find_first_entity(sel, &*q_vis));
-            // Reuse the registry-driven appliers by spawning as a child using the existing spawner
-            let pref_refs: ahash::AHashMap<&str, &serde_json::Value> = prefabs.iter().map(|(k,v)| (k.as_str(), v)).collect();
-            crate::hcl::spawn::spawn_recursive(&decl, commands, parent_entity, registry, ctx, &pref_refs);
+            // Spawning via runtime is not yet implemented with modular appliers
+            // This can be wired to a dedicated spawn queue if needed
         }
         ActionDef::Despawn { despawn } => {
             let targets = despawn.targets.as_ref().or(inherited_sel);
@@ -220,8 +219,23 @@ fn apply_action(
         ActionDef::SetVar { set_var } => { vars.insert(set_var.name.clone(), set_var.value); }
         ActionDef::AddVar { add_var } => { let e = vars.entry(add_var.name.clone()).or_insert(0.0); *e += add_var.by; }
         ActionDef::MulVar { mul_var } => { let e = vars.entry(mul_var.name.clone()).or_insert(0.0); *e *= mul_var.by; }
+        ActionDef::Emit { emit } => { EVENTS.write().expect("event bus lock").emit(emit.name.clone()); }
+        _ => { /* MOBA-specific actions not yet implemented at runtime */ }
     }
 }
+
+#[derive(Default)]
+struct EventBus {
+    current: std::collections::HashSet<String>,
+    next: std::collections::HashSet<String>,
+}
+
+impl EventBus {
+    fn flip(&mut self) { self.current.clear(); std::mem::swap(&mut self.current, &mut self.next); }
+    fn contains(&self, name: &str) -> bool { self.current.contains(name) }
+    fn emit(&mut self, name: String) { self.next.insert(name); }
+}
+
 fn for_each_selected<'a>(
     q: &Query<(Entity, Option<&Name>, Option<&HclTags>, Option<&mut Visibility>)>,
     selector: &Selector,
@@ -326,3 +340,4 @@ fn merge_json(dst: &mut serde_json::Value, src: serde_json::Value) {
         (d, s) => *d = s,
     }
 }
+

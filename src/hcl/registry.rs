@@ -52,6 +52,9 @@ impl ComponentRegistry {
     pub fn get(&self, key: &str) -> Option<&Box<dyn ComponentApplier>> {
         self.map.get(key)
     }
+    pub fn iter(&self) -> impl Iterator<Item = (&'static str, &Box<dyn ComponentApplier>)> {
+        self.map.iter().map(|(k, v)| (*k, v))
+    }
 }
 
 /// Install stock appliers.
@@ -127,9 +130,7 @@ impl ComponentApplier for TransformApplier {
 
 pub struct NameApplier;
 impl ComponentApplier for NameApplier {
-    fn key(&self) -> &'static str {
-        "Name"
-    }
+    fn key(&self) -> &'static str { "Name" }
     fn apply(
         &self,
         payload: &Json,
@@ -137,18 +138,14 @@ impl ComponentApplier for NameApplier {
         _scratch: &mut EntityScratch,
         _ctx: &mut ApplyCtx,
     ) -> anyhow::Result<()> {
-        if let Some(s) = payload.as_str() {
-            entity.insert(Name::new(s.to_owned()));
-        }
+        if let Some(s) = payload.as_str() { entity.insert(Name::new(s.to_owned())); }
         Ok(())
     }
 }
 
 pub struct VisibilityApplier;
 impl ComponentApplier for VisibilityApplier {
-    fn key(&self) -> &'static str {
-        "Visibility"
-    }
+    fn key(&self) -> &'static str { "Visibility" }
     fn apply(
         &self,
         payload: &Json,
@@ -167,12 +164,8 @@ impl ComponentApplier for VisibilityApplier {
 
 pub struct StandardMaterialRefApplier;
 impl ComponentApplier for StandardMaterialRefApplier {
-    fn key(&self) -> &'static str {
-        "StandardMaterialRef"
-    }
-    fn priority(&self) -> u8 {
-        10
-    }
+    fn key(&self) -> &'static str { "StandardMaterialRef" }
+    fn priority(&self) -> u8 { 10 }
     fn apply(
         &self,
         payload: &Json,
@@ -181,7 +174,7 @@ impl ComponentApplier for StandardMaterialRefApplier {
         ctx: &mut ApplyCtx,
     ) -> anyhow::Result<()> {
         if let Some(name) = payload.get("material").and_then(|s| s.as_str()) {
-            scratch.desired_material = ctx.materials.get(name).cloned();
+            scratch.desired_material = ctx.materials.get(name).cloned().or_else(|| ctx.materials.get("__default").cloned());
         }
         Ok(())
     }
@@ -189,12 +182,8 @@ impl ComponentApplier for StandardMaterialRefApplier {
 
 pub struct MeshRefApplier;
 impl ComponentApplier for MeshRefApplier {
-    fn key(&self) -> &'static str {
-        "MeshRef"
-    }
-    fn priority(&self) -> u8 {
-        20
-    }
+    fn key(&self) -> &'static str { "MeshRef" }
+    fn priority(&self) -> u8 { 20 }
     fn apply(
         &self,
         payload: &Json,
@@ -202,22 +191,16 @@ impl ComponentApplier for MeshRefApplier {
         scratch: &mut EntityScratch,
         ctx: &mut ApplyCtx,
     ) -> anyhow::Result<()> {
-        let mesh_name = payload
-            .get("mesh")
-            .and_then(|s| s.as_str())
-            .ok_or_else(|| anyhow::anyhow!("MeshRef.mesh missing"))?;
-        let mesh = ctx
-            .meshes
-            .get(mesh_name)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("Unknown mesh {mesh_name}"))?;
-        // Bevy 0.16: insert Mesh3d + MeshMaterial3d along with SpatialBundle
-        let material = scratch.desired_material.clone().unwrap_or_default();
+        let mesh_name = payload.get("mesh").and_then(|s| s.as_str()).ok_or_else(|| anyhow::anyhow!("MeshRef.mesh missing"))?;
+        let mesh = ctx.meshes.get(mesh_name).cloned().ok_or_else(|| anyhow::anyhow!("Unknown mesh {mesh_name}"))?;
+        let material = scratch.desired_material.clone().or_else(|| ctx.materials.get("__default").cloned()).unwrap_or_default();
         entity.insert((
             Transform::default(),
             GlobalTransform::default(),
             bevy::prelude::Mesh3d(mesh),
             bevy::pbr::MeshMaterial3d::<StandardMaterial>(material),
+            Visibility::Visible,
+            InheritedVisibility::default(),
         ));
         Ok(())
     }
@@ -225,9 +208,7 @@ impl ComponentApplier for MeshRefApplier {
 
 pub struct Camera3dApplier;
 impl ComponentApplier for Camera3dApplier {
-    fn key(&self) -> &'static str {
-        "Camera3d"
-    }
+    fn key(&self) -> &'static str { "Camera3d" }
     fn apply(
         &self,
         payload: &Json,
@@ -235,22 +216,22 @@ impl ComponentApplier for Camera3dApplier {
         _scratch: &mut EntityScratch,
         _ctx: &mut ApplyCtx,
     ) -> anyhow::Result<()> {
-        // Insert Camera3d marker; optionally configure HDR on Camera component
+        // Insert Camera3d marker and Projection so we can see large maps
         entity.insert(Camera3d::default());
-        if let Some(hdr) = payload.get("hdr").and_then(|v| v.as_bool()) {
-            let mut cam = bevy::render::camera::Camera::default();
-            cam.hdr = hdr;
-            entity.insert(cam);
-        }
+        let mut cam = bevy::render::camera::Camera::default();
+        if let Some(hdr) = payload.get("hdr").and_then(|v| v.as_bool()) { cam.hdr = hdr; }
+        entity.insert(cam);
+        // Set a far plane large enough to view 10k+ units
+        entity.insert(bevy::render::camera::Projection::Perspective(
+            bevy::render::camera::PerspectiveProjection { far: 50_000.0, ..Default::default() }
+        ));
         Ok(())
     }
 }
 
 pub struct DirectionalLightApplier;
 impl ComponentApplier for DirectionalLightApplier {
-    fn key(&self) -> &'static str {
-        "DirectionalLight"
-    }
+    fn key(&self) -> &'static str { "DirectionalLight" }
     fn apply(
         &self,
         payload: &Json,
@@ -259,12 +240,8 @@ impl ComponentApplier for DirectionalLightApplier {
         _ctx: &mut ApplyCtx,
     ) -> anyhow::Result<()> {
         let mut light = DirectionalLight::default();
-        if let Some(i) = payload.get("illuminance").and_then(|v| v.as_f64()) {
-            light.illuminance = i as f32;
-        }
-        if let Some(s) = payload.get("shadows").and_then(|v| v.as_bool()) {
-            light.shadows_enabled = s;
-        }
+        if let Some(i) = payload.get("illuminance").and_then(|v| v.as_f64()) { light.illuminance = i as f32; }
+        if let Some(s) = payload.get("shadows").and_then(|v| v.as_bool()) { light.shadows_enabled = s; }
         entity.insert(light);
         Ok(())
     }
@@ -272,9 +249,7 @@ impl ComponentApplier for DirectionalLightApplier {
 
 pub struct PointLightApplier;
 impl ComponentApplier for PointLightApplier {
-    fn key(&self) -> &'static str {
-        "PointLight"
-    }
+    fn key(&self) -> &'static str { "PointLight" }
     fn apply(
         &self,
         payload: &Json,
@@ -283,12 +258,8 @@ impl ComponentApplier for PointLightApplier {
         _ctx: &mut ApplyCtx,
     ) -> anyhow::Result<()> {
         let mut light = PointLight::default();
-        if let Some(i) = payload.get("intensity").and_then(|v| v.as_f64()) {
-            light.intensity = i as f32;
-        }
-        if let Some(r) = payload.get("range").and_then(|v| v.as_f64()) {
-            light.range = r as f32;
-        }
+        if let Some(i) = payload.get("intensity").and_then(|v| v.as_f64()) { light.intensity = i as f32; }
+        if let Some(r) = payload.get("range").and_then(|v| v.as_f64()) { light.range = r as f32; }
         entity.insert(light);
         Ok(())
     }
@@ -304,16 +275,8 @@ impl ComponentApplier for SceneRefApplier {
         _scratch: &mut EntityScratch,
         ctx: &mut ApplyCtx,
     ) -> anyhow::Result<()> {
-        let scene_name = payload
-            .get("scene")
-            .and_then(|s| s.as_str())
-            .ok_or_else(|| anyhow::anyhow!("SceneRef.scene missing"))?;
-        let scene = ctx
-            .scenes
-            .get(scene_name)
-            .cloned()
-            .ok_or_else(|| anyhow::anyhow!("Unknown scene {scene_name}"))?;
-        // Bevy 0.16: spawn scene root via SceneRoot
+        let scene_name = payload.get("scene").and_then(|s| s.as_str()).ok_or_else(|| anyhow::anyhow!("SceneRef.scene missing"))?;
+        let scene = ctx.scenes.get(scene_name).cloned().ok_or_else(|| anyhow::anyhow!("Unknown scene {scene_name}"))?;
         entity.insert(bevy::scene::SceneRoot(scene));
         Ok(())
     }

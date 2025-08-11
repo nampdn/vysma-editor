@@ -13,6 +13,43 @@ pub struct SceneDoc {
     pub triggers: Vec<TriggerDecl>,
     #[serde(default)]
     pub vars: IndexMap<String, f64>,
+    #[serde(default)]
+    pub includes: Vec<String>,
+    #[serde(default)]
+    pub modules: Vec<ModuleImport>,
+    #[serde(default)]
+    pub exports: Vec<ModuleExport>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ModuleImport {
+    pub name: String,
+    pub path: String,
+    #[serde(default)]
+    pub alias: Option<String>,
+    #[serde(default)]
+    pub version: Option<String>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ModuleExport {
+    pub name: String,
+    #[serde(default)]
+    pub prefabs: Vec<String>,
+    #[serde(default)]
+    pub entities: Vec<String>,
+    #[serde(default)]
+    pub triggers: Vec<String>,
+    #[serde(default)]
+    pub vars: Vec<String>,
+    #[serde(default)]
+    pub public: bool,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -73,6 +110,14 @@ pub struct Prefab {
     pub name: String,
     #[serde(default)]
     pub components: serde_json::Value,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -88,6 +133,10 @@ pub struct EntityDecl {
     pub tags: Vec<String>,
     #[serde(default)]
     pub persist_key: Option<String>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -143,6 +192,10 @@ pub struct TriggerDecl {
     pub actions: Vec<ActionDef>,
     #[serde(default)]
     pub target: Option<Selector>,
+    #[serde(default)]
+    pub category: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -152,6 +205,7 @@ pub enum EventDef {
     KeyHeld { key_held: String },
     Tick { tick: TickDef },
     Startup { startup: bool },
+    Event { event: String },
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -187,6 +241,15 @@ pub enum ActionDef {
     AddVar { add_var: VarDelta },
     MulVar { mul_var: VarDelta },
     TranslateAxis { translate_axis: TranslateAxisDef },
+    Emit { emit: EmitDef },
+    // MOBA-specific actions
+    CastAbility { cast_ability: CastAbilityDef },
+    DealDamage { deal_damage: DamageDef },
+    ApplyEffect { apply_effect: EffectDef },
+    SpawnProjectile { spawn_projectile: ProjectileDef },
+    PlayAnimation { play_animation: AnimationDef },
+    PlaySound { play_sound: SoundDef },
+    SpawnParticle { spawn_particle: ParticleDef },
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -228,3 +291,81 @@ pub struct TranslateAxisDef {
 }
 
 fn default_true() -> bool { true }
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct EmitDef { pub name: String }
+
+// MOBA-specific action definitions
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct CastAbilityDef {
+    pub ability: String,
+    pub caster: Option<Selector>,
+    pub target: Option<Selector>,
+    pub position: Option<[f32; 3]>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct DamageDef {
+    pub targets: Option<Selector>,
+    pub amount: f32,
+    #[serde(default)]
+    pub damage_type: Option<String>,
+    #[serde(default)]
+    pub is_magical: Option<bool>,
+    #[serde(default)]
+    pub is_pure: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct EffectDef {
+    pub targets: Option<Selector>,
+    pub effect: String,
+    #[serde(default)]
+    pub duration: Option<f32>,
+    #[serde(default)]
+    pub stack_count: Option<i32>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct ProjectileDef {
+    pub prefab: String,
+    pub from: Option<Selector>,
+    pub to: Option<Selector>,
+    pub position: Option<[f32; 3]>,
+    pub direction: Option<[f32; 3]>,
+    #[serde(default)]
+    pub speed: Option<f32>,
+    #[serde(default)]
+    pub lifetime: Option<f32>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct AnimationDef {
+    pub targets: Option<Selector>,
+    pub animation: String,
+    #[serde(default)]
+    pub speed: Option<f32>,
+    #[serde(default)]
+    pub looped: Option<bool>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct SoundDef {
+    pub targets: Option<Selector>,
+    pub sound: String,
+    #[serde(default)]
+    pub volume: Option<f32>,
+    #[serde(default)]
+    pub pitch: Option<f32>,
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct ParticleDef {
+    pub prefab: String,
+    pub position: Option<Selector>,
+    pub offset: Option<[f32; 3]>,
+    #[serde(default)]
+    pub lifetime: Option<f32>,
+    #[serde(default)]
+    pub count: Option<i32>,
+}

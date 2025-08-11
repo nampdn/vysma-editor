@@ -28,7 +28,7 @@ fn main() {
     app.add_plugins(SharedPlugin);
     // HCL: add plugin and load a more complex scene at startup
     app.add_plugins(bevy_in_app::hcl::HclPlugin);
-    app.add_systems(Startup, bevy_in_app::hcl::load_scene_at_startup("scenes/player.hcl"));
+    app.add_systems(Startup, bevy_in_app::hcl::load_scene_at_startup("scenes/moba_game.hcl"));
     cli.spawn_connections(&mut app);
 
     match cli.mode {
