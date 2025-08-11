@@ -54,6 +54,7 @@ fn normalize_hcl_to_scene(body: hcl::Body) -> Result<SceneDoc, HclLoaderError> {
     let mut prefabs: Vec<Prefab> = Vec::new();
     let mut entities: Vec<EntityDecl> = Vec::new();
     let mut triggers: Vec<TriggerDecl> = Vec::new();
+    let mut vars: indexmap::IndexMap<String, f64> = indexmap::IndexMap::new();
 
     // 1) Handle attribute-style values if present
     if let Some(attr) = find_attr(&body, "assets") {
@@ -76,6 +77,11 @@ fn normalize_hcl_to_scene(body: hcl::Body) -> Result<SceneDoc, HclLoaderError> {
             triggers = t;
         }
     }
+    if let Some(attr) = find_attr(&body, "vars") {
+        if let Ok(v) = serde_json::from_value::<indexmap::IndexMap<String, f64>>(expr_to_json(attr.expr())) {
+            vars = v;
+        }
+    }
 
     // 2) Handle block-style declarations
     for b in body.blocks() {
@@ -94,6 +100,9 @@ fn normalize_hcl_to_scene(body: hcl::Body) -> Result<SceneDoc, HclLoaderError> {
             "triggers" => {
                 collect_triggers_from_block(&mut triggers, b)?;
             }
+            "vars" => {
+                collect_vars_from_block(&mut vars, b)?;
+            }
             _ => {}
         }
     }
@@ -103,6 +112,7 @@ fn normalize_hcl_to_scene(body: hcl::Body) -> Result<SceneDoc, HclLoaderError> {
         prefab: prefabs,
         entity: entities,
         triggers,
+        vars,
     })
 }
 
@@ -271,6 +281,9 @@ fn entity_from_block(b: &hcl::Block) -> Result<EntityDecl, HclLoaderError> {
             ent.children = v;
         }
     }
+    if let Some(_attr) = find_attr(b.body(), "persist_key") {
+        ent.persist_key = get_string(b.body(), "persist_key");
+    }
     // Also support nested entity blocks as children
     for cb in b.body().blocks().filter(|x| x.identifier() == "entity") {
         ent.children.push(entity_from_block(cb)?);
@@ -288,4 +301,14 @@ fn get_string(body: &hcl::Body, key: &str) -> Option<String> {
 fn expr_to_json(e: &hcl::Expression) -> serde_json::Value {
     let v: hcl::Value = e.clone().into();
     value_to_json(&v)
+}
+
+fn collect_vars_from_block(dst: &mut indexmap::IndexMap<String, f64>, block: &hcl::Block) -> Result<(), HclLoaderError> {
+    for a in block.body().attributes() {
+        let key = a.key().to_string();
+        if let hcl::Value::Number(n) = a.expr().clone().into() {
+            if let Some(f) = n.as_f64() { dst.insert(key, f); }
+        }
+    }
+    Ok(())
 }

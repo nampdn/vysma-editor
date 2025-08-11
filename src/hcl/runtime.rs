@@ -13,6 +13,7 @@ pub struct HclRuntime {
     prefabs: HashMap<String, serde_json::Value>,
     startup_fired: bool,
     compiled_for: Option<AssetId<HclSceneAsset>>,
+    vars: HashMap<String, f64>,
 }
 
 struct CompiledTrigger {
@@ -50,15 +51,20 @@ pub fn process_triggers(
             let needs_compile = runtime.compiled_for.map(|x| x != id).unwrap_or(true);
             if needs_compile {
                 compile_runtime(&mut runtime, &asset.doc);
+                runtime.compiled_for = Some(id);
+                // Do not reset vars; users may want to retain, but ensure startup triggers re-fire
+                runtime.startup_fired = false;
             }
         }
     }
 
     if runtime.compiled.is_empty() { return; }
-
+    // dt variable for movement calculations
+    runtime.vars.insert("dt".into(), time.delta_secs_f64());
     let startup_now = if !runtime.startup_fired { runtime.startup_fired = true; true } else { false };
     let prefabs = runtime.prefabs.clone();
-    for trig in &mut runtime.compiled {
+    let mut compiled = std::mem::take(&mut runtime.compiled);
+    for trig in &mut compiled {
         let fired = match &mut trig.on {
             EventMatcher::KeyPressed(k) => keys.just_pressed(*k),
             EventMatcher::KeyHeld(k) => keys.pressed(*k),
@@ -69,9 +75,10 @@ pub fn process_triggers(
         if !evaluate_conditions(&trig.when, &q_vis) { continue; }
         let sel = trig.target.clone();
         for a in &trig.actions {
-            apply_action(a, sel.as_ref(), &mut commands, &mut q_vis, &mut q_xform, &mut q_mat, &prefabs, &registry, &mut ctx);
+            apply_action(a, sel.as_ref(), &mut commands, &mut q_vis, &mut q_xform, &mut q_mat, &prefabs, &registry, &mut ctx, &mut runtime.vars);
         }
     }
+    runtime.compiled = compiled;
 }
 
 fn compile_runtime(rt: &mut HclRuntime, doc: &SceneDoc) {
@@ -80,6 +87,7 @@ fn compile_runtime(rt: &mut HclRuntime, doc: &SceneDoc) {
     for p in &doc.prefab {
         rt.prefabs.insert(p.name.clone(), p.components.clone());
     }
+    for (k, v) in &doc.vars { rt.vars.entry(k.clone()).or_insert(*v); }
     for t in &doc.triggers {
         if let Some(on) = compile_event(&t.on) {
             rt.compiled.push(CompiledTrigger {
@@ -151,6 +159,7 @@ fn apply_action(
     prefabs: &HashMap<String, serde_json::Value>,
     registry: &crate::hcl::registry::ComponentRegistry,
     ctx: &mut ApplyCtx,
+    vars: &mut HashMap<String, f64>,
 ) {
     match action {
         ActionDef::ToggleVisibility { toggle_visibility } => {
@@ -172,6 +181,13 @@ fn apply_action(
             let targets = translate.targets.as_ref().or(inherited_sel);
             let by = translate.by;
             for_each_selected_xform(q_xform, targets, |t| { t.translation += Vec3::new(by[0], by[1], by[2]); });
+        }
+        ActionDef::TranslateAxis { translate_axis } => {
+            let targets = translate_axis.targets.as_ref().or(inherited_sel);
+            let spd = *vars.get(&translate_axis.speed_var).unwrap_or(&0.0) as f32;
+            let dt = if translate_axis.use_dt { *vars.get("dt").unwrap_or(&0.0) as f32 } else { 1.0 };
+            let v = Vec3::new(translate_axis.vec[0], translate_axis.vec[1], translate_axis.vec[2]) * (spd * dt);
+            for_each_selected_xform(q_xform, targets, |t| { t.translation += v; });
         }
         ActionDef::RotateEuler { rotate_euler } => {
             let targets = rotate_euler.targets.as_ref().or(inherited_sel);
@@ -201,6 +217,9 @@ fn apply_action(
             let targets = despawn.targets.as_ref().or(inherited_sel);
             for_each_selected(q_vis, targets.unwrap_or(&Selector::All { all: true }), |e, _, _| { commands.entity(e).despawn_recursive(); });
         }
+        ActionDef::SetVar { set_var } => { vars.insert(set_var.name.clone(), set_var.value); }
+        ActionDef::AddVar { add_var } => { let e = vars.entry(add_var.name.clone()).or_insert(0.0); *e += add_var.by; }
+        ActionDef::MulVar { mul_var } => { let e = vars.entry(mul_var.name.clone()).or_insert(0.0); *e *= mul_var.by; }
     }
 }
 fn for_each_selected<'a>(

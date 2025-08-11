@@ -8,7 +8,7 @@ use bevy::prelude::*;
 #[cfg(feature = "remote_assets")]
 use reqwest::blocking as http;
 use log::info; // Add logging dependency
-use super::types::HclTags;
+use super::types::{HclTags, HclPersistent};
 
 #[derive(Resource, Default)]
 pub struct SceneSpawner {
@@ -50,17 +50,62 @@ pub fn spawn_ready(
     }
 }
 
-pub fn hot_reload(
-    _commands: Commands,
-    _asset_server: Res<AssetServer>,
-    _spawner: ResMut<SceneSpawner>,
-    _assets: Res<Assets<HclSceneAsset>>,
-    _registry: Res<ComponentRegistry>,
-    _ctx: ResMut<ApplyCtx>,
-    _meshes: ResMut<Assets<Mesh>>,
-    _materials: ResMut<Assets<StandardMaterial>>,
+pub fn apply_persisted_state(
+    mut store: ResMut<super::types::HclPersistStore>,
+    mut q: Query<(&super::types::HclPersistent, &mut Transform)>,
 ) {
-    // TODO: handle AssetEvent<HclSceneAsset> for proper hot reload
+    if store.0.is_empty() { return; }
+    for (key, mut tf) in q.iter_mut() {
+        if let Some(saved) = store.0.get(&key.0) {
+            *tf = *saved;
+        }
+    }
+    store.0.clear();
+}
+
+pub fn hot_reload(
+    mut commands: Commands,
+    mut events: EventReader<bevy::asset::AssetEvent<HclSceneAsset>>,
+    mut spawner: ResMut<SceneSpawner>,
+    assets: Res<Assets<HclSceneAsset>>,
+    registry: Res<ComponentRegistry>,
+    mut ctx: ResMut<ApplyCtx>,
+    asset_server: Res<AssetServer>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut persist: ResMut<super::types::HclPersistStore>,
+    q_persist: Query<(&super::types::HclPersistent, Option<&Transform>)>,
+) {
+    for ev in events.read() {
+        if let bevy::asset::AssetEvent::Modified { id } = *ev {
+            if let Some(handle) = asset_server.get_id_handle(id) {
+                if let Some(root) = spawner.spawned_roots.get(&handle) {
+                    // collect persisted state
+                    persist.0.clear();
+                    for (tag, t) in q_persist.iter() {
+                        if let Some(tf) = t { persist.0.insert(tag.0.clone(), *tf); }
+                    }
+                    // despawn old
+                    commands.entity(*root).despawn_recursive();
+                }
+                // spawn new
+                if let Some(doc) = assets.get(&handle) {
+                    let new_root = spawn_scene(
+                        &mut commands,
+                        &registry,
+                        &mut ctx,
+                        &asset_server,
+                        &mut meshes,
+                        &mut materials,
+                        doc,
+                    );
+                    spawner.spawned_roots.insert(handle.clone(), new_root);
+                    // reapply persisted transforms
+                    // We can't query after spawning inside this system easily without a frame; for simplicity rely on next frame system to apply.
+                }
+            }
+        }
+    }
 }
 
 fn spawn_scene(
@@ -186,6 +231,7 @@ pub(crate) fn spawn_recursive(
         ec.insert(Name::new(n.clone()));
     }
     if !decl.tags.is_empty() { ec.insert(HclTags(decl.tags.clone())); }
+    if let Some(k) = &decl.persist_key { ec.insert(HclPersistent(k.clone())); }
 
     let mut merged = serde_json::json!({});
     for inc in &decl.include {

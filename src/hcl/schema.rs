@@ -11,6 +11,8 @@ pub struct SceneDoc {
     pub entity: Vec<EntityDecl>,
     #[serde(default)]
     pub triggers: Vec<TriggerDecl>,
+    #[serde(default)]
+    pub vars: IndexMap<String, f64>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -84,6 +86,8 @@ pub struct EntityDecl {
     pub children: Vec<EntityDecl>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default)]
+    pub persist_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -179,6 +183,10 @@ pub enum ActionDef {
     SetMaterial { set_material: MaterialSet },
     Spawn { spawn: SpawnDef },
     Despawn { despawn: ActionTarget },
+    SetVar { set_var: VarSet },
+    AddVar { add_var: VarDelta },
+    MulVar { mul_var: VarDelta },
+    TranslateAxis { translate_axis: TranslateAxisDef },
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -203,3 +211,20 @@ pub struct SpawnDef {
     pub components: serde_json::Value,
     pub parent: Option<Selector>,
 }
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct VarSet { pub name: String, pub value: f64 }
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct VarDelta { pub name: String, pub by: f64 }
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct TranslateAxisDef {
+    pub targets: Option<Selector>,
+    pub vec: [f32; 3],
+    pub speed_var: String,
+    #[serde(default = "default_true")]
+    pub use_dt: bool,
+}
+
+fn default_true() -> bool { true }

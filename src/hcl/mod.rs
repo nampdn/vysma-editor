@@ -21,10 +21,11 @@ impl Plugin for HclPlugin {
         app.init_resource::<ComponentRegistry>();
         app.init_resource::<ApplyCtx>();
         app.init_resource::<SceneSpawner>();
+        app.init_resource::<types::HclPersistStore>();
         app.init_resource::<HclRuntime>();
         app.add_event::<spawn::RespawnRequest>();
         app.add_systems(PreUpdate, spawn::hot_reload);
-        app.add_systems(Update, (spawn::spawn_ready, process_triggers));
+        app.add_systems(Update, (spawn::spawn_ready, process_triggers, spawn::apply_persisted_state));
         app.add_plugins(DefaultStdComponents);
         app.add_plugins(net::HclNetPlugin);
     }
