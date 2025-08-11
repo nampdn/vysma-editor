@@ -33,6 +33,7 @@ gui = [
     "bevy/smaa_luts",
     "bevy/default_font",
     "bevy/png",
+    "bevy/jpeg",
     "bevy/hdr",
     "bevy/x11",
     "bevy/webgl2",

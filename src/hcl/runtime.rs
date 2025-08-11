@@ -217,12 +217,46 @@ fn apply_action(
             for_each_selected_mat(q_mat, targets, |m| { m.0 = mat_h.clone(); });
         }
         ActionDef::Spawn { spawn } => {
-            // Spawning via runtime is not yet implemented with modular appliers
-            // This can be wired to a dedicated spawn queue if needed
+            // Merge prefab components (if provided) with inline components
+            let mut merged = serde_json::json!({});
+            if let Some(pref) = &spawn.prefab {
+                if let Some(p) = prefabs.get(pref) { merge_json(&mut merged, p.clone()); }
+            }
+            merge_json(&mut merged, spawn.components.clone());
+
+            // Create entity and apply components according to registry order
+            let mut ec = commands.spawn((
+                Name::new("Spawned"),
+                HclTags::default(),
+                Transform::default(),
+                GlobalTransform::default(),
+                Visibility::Visible,
+                InheritedVisibility::default(),
+            ));
+
+            // Optional parent
+            if let Some(parent_sel) = spawn.parent.as_ref() {
+                if let Some(parent) = find_first_entity(parent_sel, q_vis) {
+                    ec.insert(ChildOf(parent));
+                }
+            }
+
+            // Apply components
+            let mut items: Vec<(&'static str, &Box<dyn crate::hcl::registry::ComponentApplier>)> = registry.iter().collect();
+            items.sort_by_key(|(_, a)| a.priority());
+            if let Some(obj) = merged.as_object() {
+                let mut scratch = crate::hcl::registry::EntityScratch::default();
+                for (key, applier) in items {
+                    if let Some(payload) = obj.get(key) {
+                        let _ = applier.apply(payload, &mut ec, &mut scratch, ctx);
+                    }
+                }
+            }
+            info!("  action: spawn -> entity {:?}", ec.id());
         }
         ActionDef::Despawn { despawn } => {
             let targets = despawn.targets.as_ref().or(inherited_sel);
-            for_each_selected(q_vis, targets.unwrap_or(&Selector::All { all: true }), |e, _, _| { commands.entity(e).despawn_recursive(); });
+            for_each_selected(q_vis, targets.unwrap_or(&Selector::All { all: true }), |e, _, _| { commands.entity(e).despawn(); });
         }
         ActionDef::SetVar { set_var } => { vars.insert(set_var.name.clone(), set_var.value); }
         ActionDef::AddVar { add_var } => { let e = vars.entry(add_var.name.clone()).or_insert(0.0); *e += add_var.by; }

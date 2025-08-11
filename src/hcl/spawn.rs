@@ -141,7 +141,7 @@ fn spawn_from_doc(
 fn load_assets(
     assets: &AssetsBlock,
     ctx: &mut ApplyCtx,
-    _asset_server: &AssetServer,
+    asset_server: &AssetServer,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
 ) {
@@ -168,6 +168,14 @@ fn load_assets(
     if !ctx.materials.contains_key("__default") {
         let default_handle = materials.add(StandardMaterial::default());
         ctx.materials.insert("__default".to_string(), default_handle);
+    }
+
+    // Load GLTF scenes into ctx.scenes
+    if let Some(gl) = &assets.gltf.first() {} // keep compiler happy if empty access
+    for g in &assets.gltf {
+        let key = if let Some(node) = &g.node { format!("{}#{}", g.file, node) } else { format!("{}#Scene0", g.file) };
+        let handle: Handle<bevy::scene::Scene> = asset_server.load(key);
+        ctx.scenes.insert(g.name.clone(), handle);
     }
 }
 

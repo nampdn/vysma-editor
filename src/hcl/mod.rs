@@ -7,7 +7,6 @@ mod types;
 pub mod net;
 mod module_registry;
 mod module_loader;
-mod moba_components;
 
 use bevy::prelude::*;
 use loader::HclSceneAsset;
@@ -16,7 +15,6 @@ use spawn::SceneSpawner;
 use runtime::{HclRuntime, process_triggers};
 use module_registry::{ModuleRegistry, ModuleRegistryPlugin};
 use module_loader::{ModuleLoader, ModuleLoaderPlugin};
-use moba_components::*;
 
 pub struct HclPlugin;
 
@@ -36,19 +34,7 @@ impl Plugin for HclPlugin {
         app.add_plugins(net::HclNetPlugin);
         app.add_plugins(ModuleRegistryPlugin);
         app.add_plugins(ModuleLoaderPlugin);
-        
-        // Register MOBA components
-        app.add_systems(Startup, register_moba_components);
     }
-}
-
-/// Register all MOBA-specific component appliers
-fn register_moba_components(mut registry: ResMut<ComponentRegistry>) {
-    registry.register(HeroApplier);
-    registry.register(AbilityApplier);
-    registry.register(CombatApplier);
-    registry.register(TeamApplier);
-    registry.register(MovementApplier);
 }
 
 /// Convenience: load an HCL scene at startup and spawn when ready.

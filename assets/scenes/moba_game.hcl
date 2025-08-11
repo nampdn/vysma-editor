@@ -1,335 +1,125 @@
-// Complete MOBA Game Scene
-// Demonstrates cross-file bundling and modular architecture
-
-modules = [
-  {
-    name = "moba_core"
-    path = "scenes/moba_core.hcl"
-    alias = "core"
-  },
-  {
-    name = "axe_hero"
-    path = "scenes/heroes/axe.hcl"
-    alias = "axe"
-  }
-]
+// Complete MOBA-like Demo Scene (concise, fully HCL-driven logic)
 
 // Game configuration
 vars = {
-  map_size = 12000.0
-  base_health = 5000.0
-  tower_health = 2000.0
-  barracks_health = 1500.0
-  creep_spawn_interval = 30.0
-  gold_per_second = 1.0
+  speed = 6.0
+  game_time = 0.0
+  enemy_hp = 100.0
+  damage = 25.0
 }
 
-// Game assets
+// Assets
 assets {
-  mesh "tower" { builtin = "cube" }
-  mesh "barracks" { builtin = "cube" }
-  mesh "base" { builtin = "cube" }
-  mesh "creep" { builtin = "cube" }
-  mesh "terrain" { builtin = "plane" }
-  
-  material "radiant_gold" { pbr = { base_color = "#FFD700", metallic = 0.8, roughness = 0.2 } }
-  material "dire_red" { pbr = { base_color = "#DC143C", metallic = 0.8, roughness = 0.2 } }
-  material "neutral_gray" { pbr = { base_color = "#808080", metallic = 0.5, roughness = 0.5 } }
-  material "terrain_grass" { pbr = { base_color = "#228B22", metallic = 0.0, roughness = 0.8 } }
-  material "tower_stone" { pbr = { base_color = "#696969", metallic = 0.0, roughness = 0.9 } }
+  mesh "cube" { builtin = "cube" }
+  mesh "plane" { builtin = "plane" }
+
+  material "grass" { pbr = { base_color = "#228B22", metallic = 0.0, roughness = 0.9 } }
+  material "rock" { pbr = { base_color = "#6e6e6e", metallic = 0.0, roughness = 0.95 } }
+  material "dirt" { pbr = { base_color = "#6b4f2f", metallic = 0.0, roughness = 0.9 } }
+  material "hero" { pbr = { base_color = "#3aa7ff", metallic = 0.0, roughness = 0.8 } }
+  material "enemy" { pbr = { base_color = "#dc143c", metallic = 0.0, roughness = 0.8 } }
+
+  // Load GLTF hero model; default to first scene if node not specified
+  gltf "axe" { file = "heroes/axe.glb" }
 }
 
-// Game entities
 entity "root" {
-  components = { Name = "MOBAGame" }
+  components = { Name = "DemoRoot" }
   children = [
-    // Terrain (enlarged so it fills the view)
+    // Terrain: wide ground + simple stepped cliffs
     {
       name = "Terrain"
+      components = { MeshRef = { mesh = "plane" }, StandardMaterialRef = { material = "grass" }, Transform = { s = [200, 1, 200] } }
+      children = [
+        // Dirt path strip
+        { name = "Path", components = { MeshRef = { mesh = "plane" }, StandardMaterialRef = { material = "dirt" }, Transform = { t = [0, 0.01, 0], s = [40, 1, 6] } } },
+        // Cliff: three steps
+        { name = "Cliff1", components = { MeshRef = { mesh = "cube" }, StandardMaterialRef = { material = "rock" }, Transform = { t = [-10, 1, -5], s = [20, 2, 4] } } },
+        { name = "Cliff2", components = { MeshRef = { mesh = "cube" }, StandardMaterialRef = { material = "rock" }, Transform = { t = [-10, 2.5, -1], s = [20, 5, 2] } } },
+        { name = "Cliff3", components = { MeshRef = { mesh = "cube" }, StandardMaterialRef = { material = "rock" }, Transform = { t = [-10, 5.5, 1], s = [20, 11, 2] } } }
+      ]
+    },
+
+    // Player hero: render axe GLTF
+    {
+      name = "Player"
       components = {
-        MeshRef = { mesh = "terrain" }
-        StandardMaterialRef = { material = "terrain_grass" }
-        // Plane primitive is 1x1; scale it large to avoid only flat green with no references
-        Transform = { s = [2000, 1, 2000] }
+        SceneRef = { scene = "axe" }
+        Transform = { t = [0, 0, 0], s = [10.0, 10.0, 10.0] }
       }
     },
 
-    // Debug cube near origin so something obvious is visible
+    // Enemy dummy
     {
-      name = "DebugBox"
+      name = "Enemy"
       components = {
-        MeshRef = { mesh = "base" }
-        StandardMaterialRef = { material = "tower_stone" }
-        Transform = { t = [0, 1, 0], s = [2, 2, 2] }
+        MeshRef = { mesh = "cube" }
+        StandardMaterialRef = { material = "enemy" }
+        Transform = { t = [6, 1, 0], s = [1.5, 1.5, 1.5] }
       }
+      tags = ["enemy"]
     },
-    
-    // Radiant Base
-    {
-      name = "RadiantBase"
-      components = {
-        MeshRef = { mesh = "base" }
-        StandardMaterialRef = { material = "radiant_gold" }
-        Transform = { t = [-5000, 2, -5000], s = [8, 4, 8] }
-        include = ["core::BaseCombat"]
-        Combat = { max_health = 5000.0, max_mana = 0.0, armor = 10.0, magic_resistance = 25.0 }
-        Team = { id = 1, name = "Radiant", color = "#FFD700", is_radiant = true }
-      }
-      children = [
-        {
-          name = "RadiantAncient"
-          components = {
-            MeshRef = { mesh = "base" }
-            StandardMaterialRef = { material = "radiant_gold" }
-            Transform = { t = [0, 0, 0], s = [4, 6, 4] }
-            include = ["core::BaseCombat"]
-            Combat = { max_health = 5000.0, max_mana = 0.0, armor = 15.0, magic_resistance = 25.0 }
-          }
-        }
-      ]
-    },
-    
-    // Dire Base
-    {
-      name = "DireBase"
-      components = {
-        MeshRef = { mesh = "base" }
-        StandardMaterialRef = { material = "dire_red" }
-        Transform = { t = [5000, 2, 5000], s = [8, 4, 8] }
-        include = ["core::BaseCombat"]
-        Combat = { max_health = 5000.0, max_mana = 0.0, armor = 10.0, magic_resistance = 25.0 }
-        Team = { id = 2, name = "Dire", color = "#DC143C", is_radiant = false }
-      }
-      children = [
-        {
-          name = "DireAncient"
-          components = {
-            MeshRef = { mesh = "base" }
-            StandardMaterialRef = { material = "dire_red" }
-            Transform = { t = [0, 0, 0], s = [4, 6, 4] }
-            include = ["core::BaseCombat"]
-            Combat = { max_health = 5000.0, max_mana = 0.0, armor = 15.0, magic_resistance = 25.0 }
-          }
-        }
-      ]
-    },
-    
-    // Radiant Towers
-    {
-      name = "RadiantTowers"
-      components = { Name = "RadiantTowers" }
-      children = [
-        {
-          name = "RadiantT1Top"
-          components = {
-            MeshRef = { mesh = "tower" }
-            StandardMaterialRef = { material = "tower_stone" }
-            Transform = { t = [-3000, 3, -3000], s = [2, 6, 2] }
-            include = ["core::BaseCombat"]
-            Combat = { max_health = 2000.0, max_mana = 0.0, armor = 5.0, magic_resistance = 25.0 }
-            Team = { id = 1, name = "Radiant", color = "#FFD700", is_radiant = true }
-          }
-        },
-        {
-          name = "RadiantT1Mid"
-          components = {
-            MeshRef = { mesh = "tower" }
-            StandardMaterialRef = { material = "tower_stone" }
-            Transform = { t = [-2000, 3, -2000], s = [2, 6, 2] }
-            include = ["core::BaseCombat"]
-            Combat = { max_health = 2000.0, max_mana = 0.0, armor = 5.0, magic_resistance = 25.0 }
-            Team = { id = 1, name = "Radiant", color = "#FFD700", is_radiant = true }
-          }
-        },
-        {
-          name = "RadiantT1Bot"
-          components = {
-            MeshRef = { mesh = "tower" }
-            StandardMaterialRef = { material = "tower_stone" }
-            Transform = { t = [-3000, 3, -3000], s = [2, 6, 2] }
-            include = ["core::BaseCombat"]
-            Combat = { max_health = 2000.0, max_mana = 0.0, armor = 5.0, magic_resistance = 25.0 }
-            Team = { id = 1, name = "Radiant", color = "#FFD700", is_radiant = true }
-          }
-        }
-      ]
-    },
-    
-    // Dire Towers
-    {
-      name = "DireTowers"
-      components = { Name = "DireTowers" }
-      children = [
-        {
-          name = "DireT1Top"
-          components = {
-            MeshRef = { mesh = "tower" }
-            StandardMaterialRef = { material = "tower_stone" }
-            Transform = { t = [3000, 3, 3000], s = [2, 6, 2] }
-            include = ["core::BaseCombat"]
-            Combat = { max_health = 2000.0, max_mana = 0.0, armor = 5.0, magic_resistance = 25.0 }
-            Team = { id = 2, name = "Dire", color = "#DC143C", is_radiant = false }
-          }
-        },
-        {
-          name = "DireT1Mid"
-          components = {
-            MeshRef = { mesh = "tower" }
-            StandardMaterialRef = { material = "tower_stone" }
-            Transform = { t = [2000, 3, 2000], s = [2, 6, 2] }
-            include = ["core::BaseCombat"]
-            Combat = { max_health = 2000.0, max_mana = 0.0, armor = 5.0, magic_resistance = 25.0 }
-            Team = { id = 2, name = "Dire", color = "#DC143C", is_radiant = false }
-          }
-        },
-        {
-          name = "DireT1Bot"
-          components = {
-            MeshRef = { mesh = "tower" }
-            StandardMaterialRef = { material = "tower_stone" }
-            Transform = { t = [3000, 3, 3000], s = [2, 6, 2] }
-            include = ["core::BaseCombat"]
-            Combat = { max_health = 2000.0, max_mana = 0.0, armor = 5.0, magic_resistance = 25.0 }
-            Team = { id = 2, name = "Dire", color = "#DC143C", is_radiant = false }
-          }
-        }
-      ]
-    },
-    
-    // Hero Spawners
-    {
-      name = "RadiantHeroSpawner"
-      components = {
-        Name = "RadiantHeroSpawner"
-        Transform = { t = [-4000, 0, -4000] }
-        Team = { id = 1, name = "Radiant", color = "#FFD700", is_radiant = true }
-      }
-      children = [
-        {
-          name = "Axe"
-          include = ["axe::Axe"]
-          components = {
-            Transform = { t = [0, 0.6, 0] }
-            Team = { id = 1, name = "Radiant", color = "#FFD700", is_radiant = true }
-          }
-        }
-      ]
-    },
-    
-    {
-      name = "DireHeroSpawner"
-      components = {
-        Name = "DireHeroSpawner"
-        Transform = { t = [4000, 0, 4000] }
-        Team = { id = 2, name = "Dire", color = "#DC143C", is_radiant = false }
-      }
-      children = [
-        {
-          name = "EnemyAxe"
-          include = ["axe::Axe"]
-          components = {
-            Transform = { t = [0, 0.6, 0] }
-            Team = { id = 2, name = "Dire", color = "#DC143C", is_radiant = false }
-          }
-        }
-      ]
-    },
-    
-    // Camera and Lighting
-    {
-      name = "MainCamera"
-      components = {
-        Camera3d = { hdr = true }
-        Transform = { t = [0, 20, 30], look_at = [0, 0, 0] }
-      }
-    },
-    
-    {
-      name = "Sun"
-      components = {
-        DirectionalLight = { illuminance = 60000.0, shadows = true }
-        Transform = { euler = { x = -60, y = 45, z = 0 } }
-      }
-    }
+
+    // Camera and light
+    { name = "Camera", components = { Camera3d = { hdr = true }, Transform = { t = [0, 20, 30], look_at = [0, 1, 0] } } },
+    { name = "Sun", components = { DirectionalLight = { illuminance = 60000.0, shadows = true }, Transform = { euler = { x = -60, y = 45, z = 0 } } } }
   ]
 }
 
-// Game triggers
+// Triggers: movement, combat loop, spawning
 triggers {
-  trigger "game_start" {
-    name = "GameStart"
+  // Startup init
+  trigger "init" {
     on = { startup = true }
-    category = "game"
-    description = "Initialize game state and spawn initial entities"
     actions = [
-      { set_var = { name = "game_time", value = 0.0 } },
-      { set_var = { name = "speed", value = 5.0 } },
-      { emit = { name = "game_started" } }
+      { set_var = { name = "game_time", value = 0.0 } }
     ]
   }
 
-  // Move DebugBox with WASD using dt*speed
+  // Movement WASD, scaled by dt and speed
   trigger "move_w" {
     on = { key_held = "KeyW" }
-    target = { name = "DebugBox" }
-    actions = [ { translate = { by = [0, 0, -1] } } ]
+    target = { name = "Player" }
+    actions = [ { translate_axis = { vec = [0, 0, -1], speed_var = "speed" } } ]
   }
   trigger "move_s" {
     on = { key_held = "KeyS" }
-    target = { name = "DebugBox" }
-    actions = [ { translate = { by = [0, 0, 1] } } ]
+    target = { name = "Player" }
+    actions = [ { translate_axis = { vec = [0, 0, 1], speed_var = "speed" } } ]
   }
   trigger "move_a" {
     on = { key_held = "KeyA" }
-    target = { name = "DebugBox" }
-    actions = [ { translate = { by = [-1, 0, 0] } } ]
+    target = { name = "Player" }
+    actions = [ { translate_axis = { vec = [-1, 0, 0], speed_var = "speed" } } ]
   }
   trigger "move_d" {
     on = { key_held = "KeyD" }
-    target = { name = "DebugBox" }
-    actions = [ { translate = { by = [1, 0, 0] } } ]
+    target = { name = "Player" }
+    actions = [ { translate_axis = { vec = [1, 0, 0], speed_var = "speed" } } ]
   }
-  
-  trigger "creep_spawn" {
-    name = "CreepSpawn"
-    on = { tick = { every = 30.0 } }
-    category = "spawning"
-    description = "Spawn creeps for both teams"
+
+  // Attack on Space: subtract HP and check for death
+  trigger "attack" {
+    on = { key_pressed = "Space" }
     actions = [
-      { spawn = { prefab = "core::BaseCombat", components = { Team = { id = 1 } } } },
-      { spawn = { prefab = "core::BaseCombat", components = { Team = { id = 2 } } } }
+      { add_var = { name = "enemy_hp", by = -25.0 } },
+      { emit = { name = "check_enemy" } }
     ]
   }
-  
-  trigger "tower_destroyed" {
-    name = "TowerDestroyed"
-    on = { event = "tower_destroyed" }
-    category = "combat"
-    description = "Handle tower destruction and award gold"
-    actions = [
-      { add_var = { name = "gold", by = 200.0 } },
-      { emit = { name = "tower_fallen" } }
-    ]
+  trigger "enemy_die_check" {
+    on = { event = "check_enemy" }
+    when = [ { expr = "enemy_hp <= 0" } ]
+    target = { name = "Enemy" }
+    actions = [ { despawn = { } } ]
   }
-  
-  trigger "hero_killed" {
-    name = "HeroKilled"
-    on = { event = "hero_killed" }
-    category = "combat"
-    description = "Handle hero death and respawn"
+
+  // Respawn enemy every 5s if none visible
+  trigger "respawn_enemy" {
+    on = { tick = { every = 5.0 } }
+    when = [ { not = { all_visible = { name = "Enemy" } } } ]
     actions = [
-      { add_var = { name = "experience", by = 100.0 } },
-      { emit = { name = "hero_fallen" } }
-    ]
-  }
-  
-  trigger "victory_condition" {
-    name = "VictoryCondition"
-    on = { event = "ancient_destroyed" }
-    category = "game"
-    description = "Check victory conditions and end game"
-    actions = [
-      { emit = { name = "game_ended" } }
+      { set_var = { name = "enemy_hp", value = 100.0 } },
+      { spawn = { components = { Name = "Enemy", MeshRef = { mesh = "cube" }, StandardMaterialRef = { material = "enemy" }, Transform = { t = [6, 1, 0], s = [1.5, 1.5, 1.5] } } } }
     ]
   }
 } 

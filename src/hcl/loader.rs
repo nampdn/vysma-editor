@@ -281,6 +281,11 @@ fn entity_from_block(b: &hcl::Block) -> Result<EntityDecl, HclLoaderError> {
     if let Some(_attr) = find_attr(b.body(), "persist_key") {
         ent.persist_key = get_string(b.body(), "persist_key");
     }
+    if let Some(attr) = find_attr(b.body(), "tags") {
+        if let Ok(v) = serde_json::from_value::<Vec<String>>(expr_to_json(attr.expr())) {
+            ent.tags = v;
+        }
+    }
     // Also support nested entity blocks as children
     for cb in b.body().blocks().filter(|x| x.identifier() == "entity") {
         ent.children.push(entity_from_block(cb)?);
