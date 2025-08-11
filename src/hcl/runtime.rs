@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use crate::hcl::{
     loader::HclSceneAsset,
     registry::ApplyCtx,
-    schema::{ActionDef, ConditionDef, EventDef, SceneDoc, Selector},
+    schema::{ActionDef, ConditionDef, EventDef, FunctionDecl, SceneDoc, Selector},
     types::HclTags,
 };
 use ahash::AHashMap as HashMap;
@@ -15,6 +15,7 @@ pub struct HclRuntime {
     startup_fired: bool,
     compiled_for: Option<AssetId<HclSceneAsset>>,
     vars: HashMap<String, f64>,
+    functions: HashMap<String, FunctionDecl>,
 }
 
 struct CompiledTrigger {
@@ -80,8 +81,10 @@ pub fn process_triggers(
         };
         if !fired { continue; }
         if !evaluate_conditions(&trig.when, &q_vis) { continue; }
+        info!("HCL Trigger fired: {:?}", trig.name.as_deref().unwrap_or("<unnamed>"));
         let sel = trig.target.clone();
         for a in &trig.actions {
+            log_action_debug(a);
             apply_action(a, sel.as_ref(), &mut commands, &mut q_vis, &mut q_xform, &mut q_mat, &prefabs, &registry, &mut ctx, &mut runtime.vars);
         }
     }
@@ -91,21 +94,17 @@ pub fn process_triggers(
 fn compile_runtime(rt: &mut HclRuntime, doc: &SceneDoc) {
     rt.compiled.clear();
     rt.prefabs.clear();
-    for p in &doc.prefab {
-        rt.prefabs.insert(p.name.clone(), p.components.clone());
-    }
+    rt.functions.clear();
+    for p in &doc.prefab { rt.prefabs.insert(p.name.clone(), p.components.clone()); }
     for (k, v) in &doc.vars { rt.vars.entry(k.clone()).or_insert(*v); }
+    for f in &doc.functions { rt.functions.insert(f.name.clone(), f.clone()); }
+    rt.compiled.reserve(doc.triggers.len());
     for t in &doc.triggers {
         if let Some(on) = compile_event(&t.on) {
-            rt.compiled.push(CompiledTrigger {
-                name: t.name.clone(),
-                on,
-                when: t.when.clone(),
-                actions: t.actions.clone(),
-                target: t.target.clone(),
-            });
+            rt.compiled.push(CompiledTrigger { name: t.name.clone(), on, when: t.when.clone(), actions: t.actions.clone(), target: t.target.clone() });
         }
     }
+    info!("HCL compiled: {} prefabs, {} triggers, {} functions", rt.prefabs.len(), rt.compiled.len(), rt.functions.len());
 }
 
 fn compile_event(ev: &EventDef) -> Option<EventMatcher> {
@@ -154,7 +153,16 @@ fn eval_cond(
         ConditionDef::Any { any_visible } => any_selected(q_vis, any_visible, |vis| match vis { Some(v) => matches!(*v, Visibility::Visible), None => false }),
         ConditionDef::All { all_visible } => all_selected(q_vis, all_visible, |vis| match vis { Some(v) => matches!(*v, Visibility::Visible), None => false }),
         ConditionDef::Not { not } => !eval_cond(not, q_vis),
+        ConditionDef::Expr { expr } => eval_expr_bool(expr),
     }
+}
+
+fn eval_expr_bool(expr: &str) -> bool { evalexpr::eval_boolean(expr).unwrap_or(false) }
+fn eval_expr_f64(expr: &str, vars: &HashMap<String, f64>) -> Option<f64> {
+    use evalexpr::*;
+    let mut ctx = HashMapContext::new();
+    for (k, v) in vars { let _ = ctx.set_value(k.clone(), (*v).into()); }
+    eval_with_context(expr, &ctx).ok().and_then(|v| v.as_number().ok()).map(|n| n as f64)
 }
 
 fn apply_action(
@@ -220,7 +228,28 @@ fn apply_action(
         ActionDef::AddVar { add_var } => { let e = vars.entry(add_var.name.clone()).or_insert(0.0); *e += add_var.by; }
         ActionDef::MulVar { mul_var } => { let e = vars.entry(mul_var.name.clone()).or_insert(0.0); *e *= mul_var.by; }
         ActionDef::Emit { emit } => { EVENTS.write().expect("event bus lock").emit(emit.name.clone()); }
+        ActionDef::Eval { eval } => {
+            if let Some(v) = eval_expr_f64(&eval.expr, vars) { if let Some(k) = &eval.store_as { vars.insert(k.clone(), v); } }
+        }
         _ => { /* MOBA-specific actions not yet implemented at runtime */ }
+    }
+}
+
+fn log_action_debug(a: &ActionDef) {
+    match a {
+        ActionDef::ToggleVisibility { .. } => info!("  action: toggle_visibility"),
+        ActionDef::SetVisibility { .. } => info!("  action: set_visibility"),
+        ActionDef::Translate { translate } => info!("  action: translate by {:?}", translate.by),
+        ActionDef::TranslateAxis { translate_axis } => info!("  action: translate_axis vec={:?} speed_var={}", translate_axis.vec, translate_axis.speed_var),
+        ActionDef::RotateEuler { .. } => info!("  action: rotate_euler"),
+        ActionDef::SetMaterial { set_material } => info!("  action: set_material {}", set_material.material),
+        ActionDef::Spawn { .. } => info!("  action: spawn"),
+        ActionDef::Despawn { .. } => info!("  action: despawn"),
+        ActionDef::SetVar { set_var } => info!("  action: set_var {}={} ", set_var.name, set_var.value),
+        ActionDef::AddVar { add_var } => info!("  action: add_var {}+= {}", add_var.name, add_var.by),
+        ActionDef::MulVar { mul_var } => info!("  action: mul_var {}*= {}", mul_var.name, mul_var.by),
+        ActionDef::Emit { emit } => info!("  action: emit {}", emit.name),
+        ActionDef::Eval { eval } => info!("  action: eval '{}' store_as={:?}", eval.expr, eval.store_as),
     }
 }
 

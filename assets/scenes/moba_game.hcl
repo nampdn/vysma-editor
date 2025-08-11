@@ -263,8 +263,31 @@ triggers {
     description = "Initialize game state and spawn initial entities"
     actions = [
       { set_var = { name = "game_time", value = 0.0 } },
+      { set_var = { name = "speed", value = 5.0 } },
       { emit = { name = "game_started" } }
     ]
+  }
+
+  // Move DebugBox with WASD using dt*speed
+  trigger "move_w" {
+    on = { key_held = "KeyW" }
+    target = { name = "DebugBox" }
+    actions = [ { translate = { by = [0, 0, -1] } } ]
+  }
+  trigger "move_s" {
+    on = { key_held = "KeyS" }
+    target = { name = "DebugBox" }
+    actions = [ { translate = { by = [0, 0, 1] } } ]
+  }
+  trigger "move_a" {
+    on = { key_held = "KeyA" }
+    target = { name = "DebugBox" }
+    actions = [ { translate = { by = [-1, 0, 0] } } ]
+  }
+  trigger "move_d" {
+    on = { key_held = "KeyD" }
+    target = { name = "DebugBox" }
+    actions = [ { translate = { by = [1, 0, 0] } } ]
   }
   
   trigger "creep_spawn" {

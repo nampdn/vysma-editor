@@ -229,7 +229,7 @@ fn spawn_entity(
 
 pub fn merge_includes(doc: &SceneDoc, asset_server: &AssetServer, assets: &Assets<HclSceneAsset>) -> Option<SceneDoc> {
     if doc.includes.is_empty() { return Some(doc.clone()); }
-    let mut merged = SceneDoc { assets: doc.assets.clone(), prefab: doc.prefab.clone(), entity: doc.entity.clone(), triggers: doc.triggers.clone(), vars: doc.vars.clone(), includes: doc.includes.clone(), modules: doc.modules.clone(), exports: doc.exports.clone() };
+    let mut merged = SceneDoc { assets: doc.assets.clone(), prefab: doc.prefab.clone(), entity: doc.entity.clone(), triggers: doc.triggers.clone(), vars: doc.vars.clone(), includes: doc.includes.clone(), modules: doc.modules.clone(), exports: doc.exports.clone(), functions: doc.functions.clone() };
     for inc in &doc.includes {
         let h = asset_server.load::<HclSceneAsset>(inc.as_str());
         if let Some(dep) = assets.get(&h) { merge_doc_into(&mut merged, &dep.doc); } else { return None; }

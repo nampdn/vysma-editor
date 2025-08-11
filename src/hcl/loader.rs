@@ -109,6 +109,7 @@ fn normalize_hcl_to_scene(body: hcl::Body) -> Result<SceneDoc, HclLoaderError> {
         includes,
         modules,
         exports,
+        functions: vec![],
     })
 }
 
