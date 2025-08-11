@@ -20,12 +20,12 @@ entity "root" {
     { name = "Ground", components = { MeshRef = { mesh = "plane" }, StandardMaterialRef = { material = "gold" }, Transform = { s = [12, 1, 12] } } },
 
     // a small grid of boxes using prefab include + local Transform override
-    { name = "BoxA", include = ["BoxPrefab"], components = { Transform = { t = [-3, 0.5, -3] } } },
-    { name = "BoxB", include = ["BoxPrefab"], components = { Transform = { t = [ 0, 0.5, -3] } } },
-    { name = "BoxC", include = ["BoxPrefab"], components = { Transform = { t = [ 3, 0.5, -3] } } },
-    { name = "BoxD", include = ["BoxPrefab"], components = { Transform = { t = [-3, 0.5,  0] } } },
-    { name = "BoxE", include = ["BoxPrefab"], components = { Transform = { t = [ 0, 0.5,  0] } } },
-    { name = "BoxF", include = ["BoxPrefab"], components = { Transform = { t = [ 3, 0.5,  0] } } },
+    { name = "BoxA", include = ["BoxPrefab"], tags = ["box"], components = { Transform = { t = [-3, 0.5, -3] } } },
+    { name = "BoxB", include = ["BoxPrefab"], tags = ["box"], components = { Transform = { t = [ 0, 0.5, -3] } } },
+    { name = "BoxC", include = ["BoxPrefab"], tags = ["box"], components = { Transform = { t = [ 3, 0.5, -3] } } },
+    { name = "BoxD", include = ["BoxPrefab"], tags = ["box"], components = { Transform = { t = [-3, 0.5,  0] } } },
+    { name = "BoxE", include = ["BoxPrefab"], tags = ["box"], components = { Transform = { t = [ 0, 0.5,  0] } } },
+    { name = "BoxF", include = ["BoxPrefab"], tags = ["box"], components = { Transform = { t = [ 3, 0.5,  0] } } },
 
     // Sun light
     { name = "Sun", components = { DirectionalLight = { illuminance = 60000.0, shadows = true }, Transform = { euler = { x = -60, y = 45, z = 0 } } } },
@@ -35,3 +35,32 @@ entity "root" {
   ]
 }
 
+// Triggers to make the scene dynamic
+triggers {
+  // Toggle all boxes on Space
+  trigger "toggle_boxes" {
+    on = { key_pressed = "Space" }
+    target = { tag = "box" }
+    actions = [
+      { toggle_visibility = { } }
+    ]
+  }
+
+  // Spin all boxes slowly over time
+  trigger "spin" {
+    on = { tick = { every = 0.016 } }
+    target = { tag = "box" }
+    actions = [
+      { rotate_euler = { by = { x = 0, y = 30, z = 0 } } }
+    ]
+  }
+
+  // Change material on E
+  trigger "recolor" {
+    on = { key_pressed = "KeyE" }
+    target = { tag = "box" }
+    actions = [
+      { set_material = { material = "gold" } }
+    ]
+  }
+}

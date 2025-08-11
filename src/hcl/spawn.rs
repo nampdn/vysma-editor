@@ -8,6 +8,7 @@ use bevy::prelude::*;
 #[cfg(feature = "remote_assets")]
 use reqwest::blocking as http;
 use log::info; // Add logging dependency
+use super::types::HclTags;
 
 #[derive(Resource, Default)]
 pub struct SceneSpawner {
@@ -50,29 +51,16 @@ pub fn spawn_ready(
 }
 
 pub fn hot_reload(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    mut spawner: ResMut<SceneSpawner>,
-    assets: Res<Assets<HclSceneAsset>>,
+    _commands: Commands,
+    _asset_server: Res<AssetServer>,
+    _spawner: ResMut<SceneSpawner>,
+    _assets: Res<Assets<HclSceneAsset>>,
+    _registry: Res<ComponentRegistry>,
+    _ctx: ResMut<ApplyCtx>,
+    _meshes: ResMut<Assets<Mesh>>,
+    _materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    for handle in asset_server.asset_handles::<HclSceneAsset>() {
-        if let Some(asset) = assets.get(&handle) {
-            info!("Hot-reloading asset: {:?}", asset);
-            if let Some(root) = spawner.spawned_roots.get(&handle) {
-                commands.entity(*root).despawn_recursive();
-            }
-            let new_root = spawn_scene(
-                &mut commands,
-                &spawner.registry,
-                &mut spawner.ctx,
-                &asset_server,
-                &mut spawner.meshes,
-                &mut spawner.materials,
-                asset,
-            );
-            spawner.spawned_roots.insert(handle.clone(), new_root);
-        }
-    }
+    // TODO: handle AssetEvent<HclSceneAsset> for proper hot reload
 }
 
 fn spawn_scene(
@@ -175,7 +163,7 @@ fn build_assets_cache(
     }
 }
 
-fn spawn_recursive(
+pub(crate) fn spawn_recursive(
     decl: &EntityDecl,
     commands: &mut Commands,
     parent: Option<Entity>,
@@ -190,6 +178,7 @@ fn spawn_recursive(
     if let Some(n) = &decl.name {
         ec.insert(Name::new(n.clone()));
     }
+    if !decl.tags.is_empty() { ec.insert(HclTags(decl.tags.clone())); }
 
     let mut merged = serde_json::json!({});
     for inc in &decl.include {

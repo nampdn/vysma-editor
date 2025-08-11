@@ -2,12 +2,15 @@ mod loader;
 mod registry;
 mod schema;
 mod spawn;
+mod runtime;
+mod types;
 pub mod net;
 
 use bevy::prelude::*;
 use loader::HclSceneAsset;
 use registry::{ApplyCtx, ComponentRegistry, DefaultStdComponents};
 use spawn::SceneSpawner;
+use runtime::{HclRuntime, process_triggers};
 
 pub struct HclPlugin;
 
@@ -18,9 +21,10 @@ impl Plugin for HclPlugin {
         app.init_resource::<ComponentRegistry>();
         app.init_resource::<ApplyCtx>();
         app.init_resource::<SceneSpawner>();
+        app.init_resource::<HclRuntime>();
         app.add_event::<spawn::RespawnRequest>();
         app.add_systems(PreUpdate, spawn::hot_reload);
-        app.add_systems(Update, spawn::spawn_ready);
+        app.add_systems(Update, (spawn::spawn_ready, process_triggers));
         app.add_plugins(DefaultStdComponents);
         app.add_plugins(net::HclNetPlugin);
     }

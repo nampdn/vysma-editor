@@ -1,4 +1,4 @@
-use crate::hcl::schema::{AssetsBlock, EntityDecl, GltfAsset, ImageAsset, MaterialAsset, MeshAsset, MeshKind, PbrMat, Prefab, SceneDoc};
+use crate::hcl::schema::{AssetsBlock, EntityDecl, GltfAsset, ImageAsset, MaterialAsset, MeshAsset, MeshKind, PbrMat, Prefab, SceneDoc, TriggerDecl};
 use bevy::{
     asset::{io::Reader, AssetLoader, LoadContext},
     prelude::*,
@@ -53,6 +53,7 @@ fn normalize_hcl_to_scene(body: hcl::Body) -> Result<SceneDoc, HclLoaderError> {
     let mut assets_block: Option<AssetsBlock> = None;
     let mut prefabs: Vec<Prefab> = Vec::new();
     let mut entities: Vec<EntityDecl> = Vec::new();
+    let mut triggers: Vec<TriggerDecl> = Vec::new();
 
     // 1) Handle attribute-style values if present
     if let Some(attr) = find_attr(&body, "assets") {
@@ -70,6 +71,11 @@ fn normalize_hcl_to_scene(body: hcl::Body) -> Result<SceneDoc, HclLoaderError> {
             entities = e;
         }
     }
+    if let Some(attr) = find_attr(&body, "triggers") {
+        if let Ok(t) = serde_json::from_value::<Vec<TriggerDecl>>(expr_to_json(attr.expr())) {
+            triggers = t;
+        }
+    }
 
     // 2) Handle block-style declarations
     for b in body.blocks() {
@@ -85,6 +91,9 @@ fn normalize_hcl_to_scene(body: hcl::Body) -> Result<SceneDoc, HclLoaderError> {
             "entity" => {
                 entities.push(entity_from_block(b)?);
             }
+            "triggers" => {
+                collect_triggers_from_block(&mut triggers, b)?;
+            }
             _ => {}
         }
     }
@@ -93,6 +102,7 @@ fn normalize_hcl_to_scene(body: hcl::Body) -> Result<SceneDoc, HclLoaderError> {
         assets: assets_block,
         prefab: prefabs,
         entity: entities,
+        triggers,
     })
 }
 
@@ -137,6 +147,51 @@ fn collect_assets_from_assets_block(dst: &mut AssetsBlock, block: &hcl::Block) -
         }
     }
     Ok(())
+}
+
+fn collect_triggers_from_block(dst: &mut Vec<TriggerDecl>, block: &hcl::Block) -> Result<(), HclLoaderError> {
+    // triggers { trigger "name" { ... } }
+    for b in block.body().blocks() {
+        if b.identifier() == "trigger" {
+            dst.push(trigger_from_block(b)?);
+        }
+    }
+    // also allow attribute-style array inside triggers { trigger = [ {..}, ..] }
+    if let Some(attr) = find_attr(block.body(), "trigger") {
+        if let Ok(v) = serde_json::from_value::<Vec<TriggerDecl>>(expr_to_json(attr.expr())) {
+            dst.extend(v);
+        }
+    }
+    Ok(())
+}
+
+fn trigger_from_block(b: &hcl::Block) -> Result<TriggerDecl, HclLoaderError> {
+    let name = b
+        .labels()
+        .get(0)
+        .map(|l| l.as_str().to_string());
+    let mut decl = TriggerDecl { name, on: super::schema::EventDef::Startup { startup: true }, when: vec![], actions: vec![], target: None };
+    if let Some(attr) = find_attr(b.body(), "on") {
+        if let Ok(v) = serde_json::from_value(expr_to_json(attr.expr())) {
+            decl.on = v;
+        }
+    }
+    if let Some(attr) = find_attr(b.body(), "when") {
+        if let Ok(v) = serde_json::from_value(expr_to_json(attr.expr())) {
+            decl.when = v;
+        }
+    }
+    if let Some(attr) = find_attr(b.body(), "actions") {
+        if let Ok(v) = serde_json::from_value(expr_to_json(attr.expr())) {
+            decl.actions = v;
+        }
+    }
+    if let Some(attr) = find_attr(b.body(), "target") {
+        if let Ok(v) = serde_json::from_value(expr_to_json(attr.expr())) {
+            decl.target = Some(v);
+        }
+    }
+    Ok(decl)
 }
 
 fn mesh_from_block(b: &hcl::Block) -> Result<MeshAsset, HclLoaderError> {

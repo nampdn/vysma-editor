@@ -9,6 +9,8 @@ pub struct SceneDoc {
     pub prefab: Vec<Prefab>,
     #[serde(default)]
     pub entity: Vec<EntityDecl>,
+    #[serde(default)]
+    pub triggers: Vec<TriggerDecl>,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -122,4 +124,82 @@ impl Default for ColorDef {
     fn default() -> Self {
         ColorDef::Hex("#ffffff".into())
     }
+}
+
+// ---- Triggers / Events / Conditions / Actions ----
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct TriggerDecl {
+    #[serde(default)]
+    pub name: Option<String>,
+    pub on: EventDef,
+    #[serde(default)]
+    pub when: Vec<ConditionDef>,
+    #[serde(default)]
+    pub actions: Vec<ActionDef>,
+    #[serde(default)]
+    pub target: Option<Selector>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum EventDef {
+    KeyPressed { key_pressed: String },
+    KeyHeld { key_held: String },
+    Tick { tick: TickDef },
+    Startup { startup: bool },
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct TickDef { pub every: f32 }
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum ConditionDef {
+    Any { any_visible: Selector },
+    All { all_visible: Selector },
+    Not { not: Box<ConditionDef> },
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum Selector {
+    Name { name: String },
+    Tag { tag: String },
+    All { all: bool },
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(untagged)]
+pub enum ActionDef {
+    ToggleVisibility { toggle_visibility: ActionTarget },
+    SetVisibility { set_visibility: VisibilitySet },
+    Translate { translate: TranslateDef },
+    RotateEuler { rotate_euler: RotateDef },
+    SetMaterial { set_material: MaterialSet },
+    Spawn { spawn: SpawnDef },
+    Despawn { despawn: ActionTarget },
+}
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct ActionTarget { pub targets: Option<Selector> }
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct VisibilitySet { pub targets: Option<Selector>, pub value: Option<String> }
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct TranslateDef { pub targets: Option<Selector>, pub by: [f32; 3] }
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct RotateDef { pub targets: Option<Selector>, pub by: EulerDef }
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct MaterialSet { pub targets: Option<Selector>, pub material: String }
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct SpawnDef {
+    pub prefab: Option<String>,
+    #[serde(default)]
+    pub components: serde_json::Value,
+    pub parent: Option<Selector>,
 }
