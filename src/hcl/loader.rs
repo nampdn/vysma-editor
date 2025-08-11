@@ -4,6 +4,7 @@ use bevy::{
     prelude::*,
 };
 use thiserror::Error;
+use log::info; // Add logging dependency
 
 #[derive(Asset, TypePath, Debug, Clone)]
 pub struct HclSceneAsset {
@@ -35,8 +36,11 @@ impl AssetLoader for HclLoader {
         let mut bytes = Vec::new();
         reader.read_to_end(&mut bytes).await?;
         let s = String::from_utf8_lossy(&bytes);
+        info!("Loaded HCL file content: {}", s);
         let body: hcl::Body = hcl::from_str(&s)?;
+        info!("Parsed HCL body: {:?}", body);
         let doc = normalize_hcl_to_scene(body)?;
+        info!("Normalized SceneDoc: {:?}", doc);
         Ok(HclSceneAsset { doc })
     }
     fn extensions(&self) -> &[&str] {

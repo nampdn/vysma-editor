@@ -30,7 +30,7 @@ fn main() {
     app.add_plugins(bevy_in_app::hcl::HclPlugin);
     app.add_systems(
         Startup,
-        bevy_in_app::hcl::load_scene_at_startup("scenes/example.hcl"),
+        bevy_in_app::hcl::load_scene_at_startup("scenes/complex_example.hcl"),
     );
     cli.spawn_connections(&mut app);
 
