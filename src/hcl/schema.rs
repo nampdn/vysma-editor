@@ -178,7 +178,7 @@ pub struct TriggerDecl {
 
 #[derive(Debug, Deserialize, Clone)]
 #[serde(untagged)]
-pub enum EventDef { KeyPressed { key_pressed: String }, KeyHeld { key_held: String }, Tick { tick: TickDef }, Startup { startup: bool }, Event { event: String } }
+pub enum EventDef { KeyPressed { key_pressed: String }, KeyHeld { key_held: String }, Tick { tick: TickDef }, Startup { startup: bool }, Event { event: String }, Timer { timer: String } }
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct TickDef { pub every: f32 }
@@ -207,6 +207,8 @@ pub enum ActionDef {
     TranslateAxis { translate_axis: TranslateAxisDef },
     Emit { emit: EmitDef },
     Eval { eval: EvalDef },
+    SetTimer { set_timer: SetTimerDef },
+    Apply { apply: ApplyDef },
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -238,7 +240,13 @@ pub struct TranslateAxisDef { pub targets: Option<Selector>, pub vec: [f32; 3], 
 fn default_true() -> bool { true }
 
 #[derive(Debug, Deserialize, Clone, Default)]
-pub struct EmitDef { pub name: String }
+pub struct EmitDef { pub name: String, #[serde(default)] pub payload: Option<IndexMap<String, f64>> }
 
 #[derive(Debug, Deserialize, Clone, Default)]
 pub struct EvalDef { pub expr: String, #[serde(default)] pub store_as: Option<String> }
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct SetTimerDef { pub name: String, pub seconds: f32, #[serde(default)] pub repeating: Option<bool> }
+
+#[derive(Debug, Deserialize, Clone, Default)]
+pub struct ApplyDef { pub targets: Option<Selector>, pub path: String, pub value: serde_json::Value }

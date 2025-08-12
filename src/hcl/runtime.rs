@@ -16,6 +16,32 @@ pub struct HclRuntime {
     compiled_for: Option<AssetId<HclSceneAsset>>,
     vars: HashMap<String, f64>,
     functions: HashMap<String, FunctionDecl>,
+    timers: HashMap<String, Timer>,
+    pub recent: std::collections::VecDeque<String>,
+}
+
+impl HclRuntime {
+    pub fn overlay_line(&self, max_vars: usize, max_recent: usize) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        // Vars (sorted, limited)
+        let mut kv: Vec<_> = self.vars.iter().collect();
+        kv.sort_by(|a, b| a.0.cmp(b.0));
+        let mut taken = 0usize;
+        for (k, v) in kv {
+            if taken >= max_vars { break; }
+            if k == "dt" { continue; }
+            parts.push(format!("{}={:.2}", k, v));
+            taken += 1;
+        }
+        // Recent
+        if !self.recent.is_empty() {
+            let mut tail = Vec::new();
+            for s in self.recent.iter().rev().take(max_recent) { tail.push(s.clone()); }
+            parts.push(format!("recent=[{}]", tail.join(" | ")));
+        }
+        parts.join("  ")
+    }
+    pub fn get_var(&self, key: &str) -> Option<f64> { self.vars.get(key).copied() }
 }
 
 struct CompiledTrigger {
@@ -32,6 +58,7 @@ enum EventMatcher {
     Tick(Timer),
     Startup,
     Bus(String),
+    Timer(String),
 }
 
 static EVENTS: once_cell::sync::Lazy<RwLock<EventBus>> = once_cell::sync::Lazy::new(|| RwLock::new(EventBus::default()));
@@ -57,17 +84,22 @@ pub fn process_triggers(
             if needs_compile {
                 compile_runtime(&mut runtime, &asset.doc);
                 runtime.compiled_for = Some(id);
-                // Do not reset vars; users may want to retain, but ensure startup triggers re-fire
                 runtime.startup_fired = false;
             }
         }
     }
 
     if runtime.compiled.is_empty() { return; }
-    // dt variable for movement calculations
-    runtime.vars.insert("dt".into(), time.delta_secs_f64());
+
+    // Move vars and timers out to avoid overlapping mutable borrows of runtime
+    let mut vars = std::mem::take(&mut runtime.vars);
+    let mut timers = std::mem::take(&mut runtime.timers);
+
+    // Update dt and advance timers
+    vars.insert("dt".into(), time.delta_secs_f64());
+    for (_name, t) in timers.iter_mut() { t.tick(time.delta()); }
+
     let startup_now = if !runtime.startup_fired { runtime.startup_fired = true; true } else { false };
-    // flip event bus for this frame
     EVENTS.write().expect("event bus lock").flip();
     let prefabs = runtime.prefabs.clone();
     let mut compiled = std::mem::take(&mut runtime.compiled);
@@ -78,17 +110,24 @@ pub fn process_triggers(
             EventMatcher::Tick(timer) => timer.tick(time.delta()).just_finished(),
             EventMatcher::Startup => startup_now,
             EventMatcher::Bus(name) => EVENTS.read().expect("event bus lock").contains(name),
+            EventMatcher::Timer(name) => timers.get(name).map(|t| t.just_finished()).unwrap_or(false),
         };
         if !fired { continue; }
         if !evaluate_conditions(&trig.when, &q_vis) { continue; }
-        info!("HCL Trigger fired: {:?}", trig.name.as_deref().unwrap_or("<unnamed>"));
+        let tname = trig.name.as_deref().unwrap_or("<unnamed>").to_string();
+        info!("HCL Trigger fired: {:?}", tname);
+        runtime.recent.push_back(format!("fired {tname}"));
+        while runtime.recent.len() > 32 { runtime.recent.pop_front(); }
         let sel = trig.target.clone();
         for a in &trig.actions {
             log_action_debug(a);
-            apply_action(a, sel.as_ref(), &mut commands, &mut q_vis, &mut q_xform, &mut q_mat, &prefabs, &registry, &mut ctx, &mut runtime.vars);
+            apply_action(a, sel.as_ref(), &mut commands, &mut q_vis, &mut q_xform, &mut q_mat, &prefabs, &registry, &mut ctx, &mut vars, &mut timers);
         }
     }
+    // Write back
     runtime.compiled = compiled;
+    runtime.vars = vars;
+    runtime.timers = timers;
 }
 
 fn compile_runtime(rt: &mut HclRuntime, doc: &SceneDoc) {
@@ -114,6 +153,7 @@ fn compile_event(ev: &EventDef) -> Option<EventMatcher> {
         EventDef::Tick { tick } => Some(EventMatcher::Tick(Timer::from_seconds(tick.every.max(0.0001), TimerMode::Repeating))),
         EventDef::Startup { .. } => Some(EventMatcher::Startup),
         EventDef::Event { event } => Some(EventMatcher::Bus(event.clone())),
+        EventDef::Timer { timer } => Some(EventMatcher::Timer(timer.clone())),
     }
 }
 
@@ -176,6 +216,7 @@ fn apply_action(
     registry: &crate::hcl::registry::ComponentRegistry,
     ctx: &mut ApplyCtx,
     vars: &mut HashMap<String, f64>,
+    timers: &mut HashMap<String, Timer>,
 ) {
     match action {
         ActionDef::ToggleVisibility { toggle_visibility } => {
@@ -217,14 +258,9 @@ fn apply_action(
             for_each_selected_mat(q_mat, targets, |m| { m.0 = mat_h.clone(); });
         }
         ActionDef::Spawn { spawn } => {
-            // Merge prefab components (if provided) with inline components
             let mut merged = serde_json::json!({});
-            if let Some(pref) = &spawn.prefab {
-                if let Some(p) = prefabs.get(pref) { merge_json(&mut merged, p.clone()); }
-            }
+            if let Some(pref) = &spawn.prefab { if let Some(p) = prefabs.get(pref) { merge_json(&mut merged, p.clone()); } }
             merge_json(&mut merged, spawn.components.clone());
-
-            // Create entity and apply components according to registry order
             let mut ec = commands.spawn((
                 Name::new("Spawned"),
                 HclTags::default(),
@@ -233,24 +269,12 @@ fn apply_action(
                 Visibility::Visible,
                 InheritedVisibility::default(),
             ));
-
-            // Optional parent
-            if let Some(parent_sel) = spawn.parent.as_ref() {
-                if let Some(parent) = find_first_entity(parent_sel, q_vis) {
-                    ec.insert(ChildOf(parent));
-                }
-            }
-
-            // Apply components
+            if let Some(parent_sel) = spawn.parent.as_ref() { if let Some(parent) = find_first_entity(parent_sel, q_vis) { ec.insert(ChildOf(parent)); } }
             let mut items: Vec<(&'static str, &Box<dyn crate::hcl::registry::ComponentApplier>)> = registry.iter().collect();
             items.sort_by_key(|(_, a)| a.priority());
             if let Some(obj) = merged.as_object() {
                 let mut scratch = crate::hcl::registry::EntityScratch::default();
-                for (key, applier) in items {
-                    if let Some(payload) = obj.get(key) {
-                        let _ = applier.apply(payload, &mut ec, &mut scratch, ctx);
-                    }
-                }
+                for (key, applier) in items { if let Some(payload) = obj.get(key) { let _ = applier.apply(payload, &mut ec, &mut scratch, ctx); } }
             }
             info!("  action: spawn -> entity {:?}", ec.id());
         }
@@ -261,11 +285,38 @@ fn apply_action(
         ActionDef::SetVar { set_var } => { vars.insert(set_var.name.clone(), set_var.value); }
         ActionDef::AddVar { add_var } => { let e = vars.entry(add_var.name.clone()).or_insert(0.0); *e += add_var.by; }
         ActionDef::MulVar { mul_var } => { let e = vars.entry(mul_var.name.clone()).or_insert(0.0); *e *= mul_var.by; }
-        ActionDef::Emit { emit } => { EVENTS.write().expect("event bus lock").emit(emit.name.clone()); }
-        ActionDef::Eval { eval } => {
-            if let Some(v) = eval_expr_f64(&eval.expr, vars) { if let Some(k) = &eval.store_as { vars.insert(k.clone(), v); } }
+        ActionDef::Emit { emit } => {
+            if let Some(p) = &emit.payload { let map: HashMap<String, f64> = p.iter().map(|(k,v)| (k.clone(), *v)).collect(); EVENTS.write().expect("event bus lock").emit_with_payload(emit.name.clone(), map); }
+            else { EVENTS.write().expect("event bus lock").emit(emit.name.clone()); }
         }
-        _ => { /* MOBA-specific actions not yet implemented at runtime */ }
+        ActionDef::Eval { eval } => { if let Some(v) = eval_expr_f64(&eval.expr, vars) { if let Some(k) = &eval.store_as { vars.insert(k.clone(), v); } } }
+        ActionDef::SetTimer { set_timer } => {
+            let mode = if set_timer.repeating.unwrap_or(true) { TimerMode::Repeating } else { TimerMode::Once };
+            timers.insert(set_timer.name.clone(), Timer::from_seconds(set_timer.seconds.max(0.0001), mode));
+        }
+        ActionDef::Apply { apply } => {
+            let targets = apply.targets.as_ref().or(inherited_sel);
+            // Support a minimal subset of paths: Transform.t, Transform.s, Visibility, StandardMaterialRef.material
+            let path = apply.path.as_str();
+            if path == "Visibility" {
+                for_each_selected_vis(q_vis, targets, |_vis| { /* could toggle/set via value string later */ });
+            } else if path == "Transform.t" {
+                if let Some(arr) = apply.value.as_array().and_then(|a| if a.len()==3 { Some([a[0].as_f64().unwrap_or(0.0) as f32, a[1].as_f64().unwrap_or(0.0) as f32, a[2].as_f64().unwrap_or(0.0) as f32]) } else { None }) {
+                    for_each_selected_xform(q_xform, targets, |t| { t.translation = Vec3::new(arr[0], arr[1], arr[2]); });
+                }
+            } else if path == "Transform.s" {
+                if let Some(arr) = apply.value.as_array().and_then(|a| if a.len()==3 { Some([a[0].as_f64().unwrap_or(1.0) as f32, a[1].as_f64().unwrap_or(1.0) as f32, a[2].as_f64().unwrap_or(1.0) as f32]) } else { None }) {
+                    for_each_selected_xform(q_xform, targets, |t| { t.scale = Vec3::new(arr[0], arr[1], arr[2]); });
+                }
+            } else if path == "StandardMaterialRef.material" {
+                if let Some(mat_name) = apply.value.as_str() {
+                    if let Some(mat) = ctx.materials.get(mat_name).cloned() {
+                        for_each_selected_mat(q_mat, targets, |m| { m.0 = mat.clone(); });
+                    }
+                }
+            }
+        }
+        _ => {}
     }
 }
 
@@ -284,6 +335,8 @@ fn log_action_debug(a: &ActionDef) {
         ActionDef::MulVar { mul_var } => info!("  action: mul_var {}*= {}", mul_var.name, mul_var.by),
         ActionDef::Emit { emit } => info!("  action: emit {}", emit.name),
         ActionDef::Eval { eval } => info!("  action: eval '{}' store_as={:?}", eval.expr, eval.store_as),
+        ActionDef::SetTimer { set_timer } => info!("  action: set_timer name={} seconds={} repeating={}", set_timer.name, set_timer.seconds, set_timer.repeating.unwrap_or(true)),
+        ActionDef::Apply { apply } => info!("  action: apply path={} value={}", apply.path, apply.value),
     }
 }
 
@@ -291,12 +344,15 @@ fn log_action_debug(a: &ActionDef) {
 struct EventBus {
     current: std::collections::HashSet<String>,
     next: std::collections::HashSet<String>,
+    payloads: HashMap<String, HashMap<String, f64>>, // simple numeric payloads
 }
 
 impl EventBus {
-    fn flip(&mut self) { self.current.clear(); std::mem::swap(&mut self.current, &mut self.next); }
+    fn flip(&mut self) { self.current.clear(); std::mem::swap(&mut self.current, &mut self.next); self.payloads.clear(); }
     fn contains(&self, name: &str) -> bool { self.current.contains(name) }
     fn emit(&mut self, name: String) { self.next.insert(name); }
+    fn emit_with_payload(&mut self, name: String, payload: HashMap<String, f64>) { self.next.insert(name.clone()); self.payloads.insert(name, payload); }
+    fn get_payload(&self, name: &str) -> Option<&HashMap<String, f64>> { self.payloads.get(name) }
 }
 
 fn for_each_selected<'a>(
