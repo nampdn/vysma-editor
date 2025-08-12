@@ -34,8 +34,8 @@ entity "root" {
         // Dirt path strip
         { name = "Path", components = { MeshRef = { mesh = "plane" }, StandardMaterialRef = { material = "dirt" }, Transform = { t = [0, 0.01, 0], s = [40, 1, 6] } } },
         // Cliff: three steps
-        // { name = "Cliff1", components = { MeshRef = { mesh = "cube" }, StandardMaterialRef = { material = "rock" }, Transform = { t = [-10, 1, -5], s = [20, 2, 4] } } },
-        // { name = "Cliff2", components = { MeshRef = { mesh = "cube" }, StandardMaterialRef = { material = "dirt" }, Transform = { t = [-10, 2.5, -1], s = [20, 5, 2] } } },
+        { name = "Cliff1", components = { MeshRef = { mesh = "cube" }, StandardMaterialRef = { material = "rock" }, Transform = { t = [-10, 1, -5], s = [20, 2, 4] } } },
+        { name = "Cliff2", components = { MeshRef = { mesh = "cube" }, StandardMaterialRef = { material = "dirt" }, Transform = { t = [-10, 2.5, -1], s = [20, 5, 2] } } },
         // { name = "Cliff3", components = { MeshRef = { mesh = "cube" }, StandardMaterialRef = { material = "grass" }, Transform = { t = [-10, 5.5, 1], s = [20, 11, 2] } } }
       ]
     },

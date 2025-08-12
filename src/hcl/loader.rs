@@ -48,8 +48,14 @@ impl AssetLoader for HclLoader {
     }
 }
 
+/// Parse an in-memory HCL source string into an asset (no IO, for network/editor updates)
+pub fn parse_hcl_to_asset(source: &str) -> Result<HclSceneAsset, HclLoaderError> {
+    let body: hcl::Body = hcl::from_str(source)?;
+    let doc = normalize_hcl_to_scene(body)?;
+    Ok(HclSceneAsset { doc })
+}
+
 fn normalize_hcl_to_scene(body: hcl::Body) -> Result<SceneDoc, HclLoaderError> {
-    use hcl::{Attribute, Block};
     let mut assets_block: Option<AssetsBlock> = None;
     let mut prefabs: Vec<Prefab> = Vec::new();
     let mut entities: Vec<EntityDecl> = Vec::new();

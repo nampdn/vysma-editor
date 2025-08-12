@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use loader::HclSceneAsset;
 use registry::{ApplyCtx, ComponentRegistry, DefaultStdComponents};
 use spawn::SceneSpawner;
-use runtime::{HclRuntime, process_triggers};
+use runtime::{process_triggers, HclRuntime};
 use module_registry::{ModuleRegistry, ModuleRegistryPlugin};
 use module_loader::{ModuleLoader, ModuleLoaderPlugin};
 
@@ -22,6 +22,21 @@ pub struct HclPlugin;
 
 #[derive(Resource)]
 struct HclOverlayLogTimer(Timer);
+
+// Authoring mode: Edit pauses gameplay triggers; Preview runs them.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditorMode { Edit, Preview }
+
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct EditorState(pub EditorMode);
+impl Default for EditorState { fn default() -> Self { Self(EditorMode::Preview) } }
+
+fn toggle_editor_mode(keys: Res<ButtonInput<KeyCode>>, mut mode: ResMut<EditorState>) {
+    if keys.just_pressed(KeyCode::F5) {
+        mode.0 = match mode.0 { EditorMode::Edit => EditorMode::Preview, EditorMode::Preview => EditorMode::Edit };
+        info!("HCL EditorMode -> {:?}", mode.0);
+    }
+}
 
 fn log_overlay(mut timer: ResMut<HclOverlayLogTimer>, time: Res<Time>, rt: Option<Res<HclRuntime>>) {
     if !timer.0.tick(time.delta()).just_finished() { return; }
@@ -43,11 +58,12 @@ impl Plugin for HclPlugin {
         app.init_resource::<SceneSpawner>();
         app.init_resource::<types::HclPersistStore>();
         app.init_resource::<HclRuntime>();
+        app.init_resource::<EditorState>();
         app.insert_resource(HclOverlayLogTimer(Timer::from_seconds(1.0, TimerMode::Repeating)));
         app.add_event::<spawn::RespawnRequest>();
         app.add_systems(PreUpdate, spawn::hot_reload);
         app.add_systems(Update, (spawn::spawn_ready, process_triggers, spawn::apply_persisted_state));
-        app.add_systems(Update, log_overlay);
+        app.add_systems(Update, (log_overlay, toggle_editor_mode));
         app.add_plugins(DefaultStdComponents);
         app.add_plugins(net::HclNetPlugin);
         app.add_plugins(ModuleRegistryPlugin);

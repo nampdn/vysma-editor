@@ -12,7 +12,7 @@ impl Plugin for RendererPlugin {
     }
 }
 
-fn init(mut commands: Commands) {
+fn init(_commands: Commands) {
     // commands.spawn(Camera2d);
 }
 

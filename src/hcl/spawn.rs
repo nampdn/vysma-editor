@@ -7,8 +7,7 @@ use ahash::AHashMap as HashMap;
 use bevy::prelude::*;
 #[cfg(feature = "remote_assets")]
 use reqwest::blocking as http;
-use log::info; // Add logging dependency
-use super::types::{HclTags, HclPersistent};
+use super::types::{HclPersistent, HclTags};
 
 #[derive(Resource, Default)]
 pub struct SceneSpawner {
@@ -31,6 +30,19 @@ pub fn spawn_ready(
 ) {
     if let Some(entry) = entry {
         if let Some(h) = &entry.0 {
+            // If we already spawned a different handle previously (e.g., network content update),
+            // despawn all previously spawned roots to avoid duplicates (cameras, lights, etc.).
+            if !spawner.spawned_roots.contains_key(h) && !spawner.spawned_roots.is_empty() {
+                let mut to_remove: Vec<Handle<HclSceneAsset>> = Vec::new();
+                for (old_handle, root) in spawner.spawned_roots.iter() {
+                    if commands.get_entity(*root).is_ok() {
+                        commands.entity(*root).despawn();
+                    }
+                    to_remove.push(old_handle.clone());
+                }
+                for key in to_remove { spawner.spawned_roots.remove(&key); }
+            }
+
             if spawner.spawned_roots.contains_key(h) { return; }
             if let Some(asset) = assets.get(h) {
                 let Some(doc) = merge_includes(&asset.doc, &asset_server, &assets) else { return; };
@@ -51,7 +63,7 @@ pub fn spawn_ready(
 
 pub fn apply_persisted_state(
     mut store: ResMut<super::types::HclPersistStore>,
-    mut q: Query<(&super::types::HclPersistent, &mut Transform)>,
+    mut q: Query<(&HclPersistent, &mut Transform)>,
 ) {
     if store.0.is_empty() { return; }
     for (key, mut tf) in q.iter_mut() {
@@ -71,7 +83,7 @@ pub fn hot_reload(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut persist: ResMut<super::types::HclPersistStore>,
-    q_persist: Query<(&super::types::HclPersistent, Option<&Transform>)>,
+    q_persist: Query<(&HclPersistent, Option<&Transform>)>,
 ) {
     for ev in events.read() {
         if let bevy::asset::AssetEvent::Modified { id } = *ev {
@@ -80,7 +92,8 @@ pub fn hot_reload(
                 if let Some(root) = spawner.spawned_roots.get(&handle) {
                     persist.0.clear();
                     for (tag, t) in q_persist.iter() { if let Some(tf) = t { persist.0.insert(tag.0.clone(), *tf); } }
-                    commands.entity(*root).despawn_recursive();
+                    // despawn() now despawns recursively as well in Bevy 0.16
+                    commands.entity(*root).despawn();
                 }
                 if let Some(asset) = assets.get(&handle) {
                     let Some(doc) = merge_includes(&asset.doc, &asset_server, &assets) else { continue; };
@@ -147,14 +160,15 @@ fn load_assets(
     materials: &mut Assets<StandardMaterial>,
 ) {
     for m in &assets.mesh {
-        if let MeshKind::Builtin { builtin } = &m.kind {
-            let mesh = match builtin.as_str() {
-                "cube" => Mesh::from(Cuboid::default()),
-                "plane" => Mesh::from(Plane3d::default()),
-                _ => Mesh::from(Cuboid::default()),
-            };
-            ctx.meshes.insert(m.name.clone(), meshes.add(mesh));
-        }
+        let builtin = match &m.kind {
+            MeshKind::Builtin { builtin } => builtin.as_str(),
+        };
+        let mesh = match builtin {
+            "cube" => Mesh::from(Cuboid::default()),
+            "plane" => Mesh::from(Plane3d::default()),
+            _ => Mesh::from(Cuboid::default()),
+        };
+        ctx.meshes.insert(m.name.clone(), meshes.add(mesh));
     }
     for mat in &assets.material {
         let color = crate::hcl::registry::color_from_def(&mat.pbr.as_ref().and_then(|p| p.base_color.clone()).unwrap_or_default());
@@ -172,7 +186,6 @@ fn load_assets(
     }
 
     // Load GLTF scenes into ctx.scenes
-    if let Some(gl) = &assets.gltf.first() {} // keep compiler happy if empty access
     for g in &assets.gltf {
         let key = if let Some(node) = &g.node { format!("{}#{}", g.file, node) } else { format!("{}#Scene0", g.file) };
         let handle: Handle<bevy::scene::Scene> = asset_server.load(key);

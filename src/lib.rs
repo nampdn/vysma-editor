@@ -26,16 +26,12 @@ pub use input_binding::*;
 mod android_asset_io;
 
 pub mod hcl;
-mod breakout_game;
 pub mod client;
 pub mod common;
-mod lighting_demo;
 mod protocol;
 pub mod renderer;
 pub mod server;
-mod shapes_demo;
 pub mod shared;
-mod stepping;
 mod input_binding;
 
 #[allow(unused_variables)]

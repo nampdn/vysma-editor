@@ -1,10 +1,10 @@
 use bevy::prelude::*;
 use bevy::input::{
     ButtonInput,
-    keyboard::{KeyCode},
+    keyboard::KeyCode,
     mouse::{MouseButton, MouseMotion, MouseWheel},
     touch::{TouchInput, TouchPhase},
-    gamepad::{Gamepad, GamepadAxis, GamepadButton},
+    gamepad::{GamepadAxis, GamepadButton},
 };
 use std::collections::HashMap;
 
@@ -90,9 +90,9 @@ fn touch_to_mouse_binding(
     mut touch_events: EventReader<TouchInput>,
     mut mouse_button: ResMut<ButtonInput<MouseButton>>,
     mut mouse_motion_events: EventWriter<MouseMotion>,
-    mut mouse_wheel_events: EventWriter<MouseWheel>,
+    _mouse_wheel_events: EventWriter<MouseWheel>,
     bindings: Res<InputBindings>,
-    window_query: Query<&Window>,
+    _window_query: Query<&Window>,
 ) {
     let mut touch_positions: HashMap<u64, Vec2> = HashMap::new();
     let mut touch_start_positions: HashMap<u64, Vec2> = HashMap::new();
@@ -123,7 +123,7 @@ fn touch_to_mouse_binding(
                 if touch_positions.len() == 2 {
                     let positions: Vec<Vec2> = touch_positions.values().copied().collect();
                     let avg_y = positions.iter().map(|p| p.y).sum::<f32>() / positions.len() as f32;
-                    let scroll_delta = avg_y * 0.01; // Scale factor
+                    let _scroll_delta = avg_y * 0.01; // Scale factor
                     // Note: MouseWheel requires window entity, simplified for now
                     // mouse_wheel_events.send(MouseWheel { unit: MouseWheelUnit::Line, x: 0.0, y: scroll_delta });
                 }
@@ -168,14 +168,14 @@ fn touch_to_keyboard_binding(
 fn touch_to_gamepad_binding(
     mut touch_events: EventReader<TouchInput>,
     mut gamepad_button: ResMut<ButtonInput<GamepadButton>>,
-    mut gamepad_axis: ResMut<Axis<GamepadAxis>>,
+    mut _gamepad_axis: ResMut<Axis<GamepadAxis>>,
     bindings: Res<InputBindings>,
 ) {
     for joystick in &bindings.virtual_joysticks {
         // Handle virtual joystick input
         for event in touch_events.read() {
             if is_touch_in_joystick_area(event.position, joystick) {
-                let joystick_value = calculate_joystick_value(event.position, joystick);
+                let _joystick_value = calculate_joystick_value(event.position, joystick);
                 
                 // Update gamepad axis - simplified for now
                 // gamepad_axis.set(GamepadAxis::new(Gamepad::new(0), joystick.axis_mapping.0), joystick_value.x);
@@ -394,12 +394,12 @@ impl InputBindingExt for App {
         self.insert_resource(bindings);
     }
     
-    fn add_virtual_joystick(&mut self, joystick: VirtualJoystick) {
+    fn add_virtual_joystick(&mut self, _joystick: VirtualJoystick) {
         // Note: This would need to be implemented differently in a real app
         // For now, we'll just ignore this call
     }
     
-    fn add_touch_ui_element(&mut self, element: TouchUIElement) {
+    fn add_touch_ui_element(&mut self, _element: TouchUIElement) {
         // Note: This would need to be implemented differently in a real app
         // For now, we'll just ignore this call
     }

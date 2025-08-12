@@ -9,6 +9,7 @@ use lightyear::prelude::*;
 
 use crate::protocol::Direction;
 use crate::shared::{color_from_id, shared_movement_behaviour};
+#[cfg(any(target_os = "ios", target_os = "android"))]
 use crate::InputBindingExt;
 
 pub struct VysmaClientPlugin;
@@ -30,7 +31,7 @@ impl Plugin for VysmaClientPlugin {
             write_inputs.in_set(InputSet::WriteClientInputs),
         );
         // all actions related-system that can be rolled back should be in the `FixedUpdate` schedule
-        app.add_systems(FixedUpdate, (player_movement));
+        app.add_systems(FixedUpdate, player_movement);
         app.add_systems(
             Update,
             (cursor_movement, touch_cursor_movement, spawn_player, spawn_player_on_click),

@@ -5,6 +5,8 @@ use bevygap_client_plugin::prelude::*;
 use lightyear::connection::client::ClientState;
 use lightyear::prelude::*;
 
+use crate::hcl::{EditorMode, EditorState};
+
 pub struct ClientRendererPlugin {
     /// The name of the example, which must also match the edgegap application name.
     pub name: String,
@@ -19,13 +21,26 @@ impl ClientRendererPlugin {
 #[derive(Resource)]
 struct GameName(String);
 
+#[derive(Component)]
+struct StatusMessageMarker;
+
+#[derive(Component)]
+pub(crate) struct ClientButton;
+
+#[derive(Component)]
+struct ModeText;
+
+#[derive(Component)]
+struct ToggleModeButton;
+
 impl Plugin for ClientRendererPlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(GameName(self.name.clone()));
         app.insert_resource(ClearColor::default());
         app.add_systems(Startup, set_window_title);
         spawn_connect_button(app);
-        app.add_systems(Update, update_button_text);
+        spawn_mode_controls(app);
+        app.add_systems(Update, (update_button_text, update_mode_text));
         app.add_observer(on_update_status_message);
         app.add_observer(handle_connection);
         app.add_observer(handle_disconnection);
@@ -34,7 +49,7 @@ impl Plugin for ClientRendererPlugin {
 
 fn set_window_title(mut window: Query<&mut Window>, game_name: Res<GameName>) {
     let mut window = window.single_mut().unwrap();
-    window.title = format!("Lightyear Example: {}", game_name.0);
+    window.title = format!("Vysma Editor: {}", game_name.0);
 }
 
 #[derive(Event, Debug)]
@@ -48,12 +63,6 @@ fn on_update_status_message(
         text.0 = trigger.event().0.clone();
     }
 }
-
-#[derive(Component)]
-struct StatusMessageMarker;
-
-#[derive(Component)]
-pub(crate) struct ClientButton;
 
 /// Create a button that allow you to connect/disconnect to a server
 pub(crate) fn spawn_connect_button(app: &mut App) {
@@ -92,9 +101,7 @@ pub(crate) fn spawn_connect_button(app: &mut App) {
                         width: Val::Px(150.0),
                         height: Val::Px(65.0),
                         border: UiRect::all(Val::Px(5.0)),
-                        // horizontally center child text
                         justify_content: JustifyContent::Center,
-                        // vertically center child text
                         align_items: AlignItems::Center,
                         ..default()
                     },
@@ -104,9 +111,7 @@ pub(crate) fn spawn_connect_button(app: &mut App) {
                     |_: Trigger<Pointer<Click>>,
                      mut commands: Commands,
                      query: Query<(Entity, &Client)>| {
-                        let Ok((entity, client)) = query.single() else {
-                            return;
-                        };
+                        let Ok((entity, client)) = query.single() else { return; };
                         match client.state {
                             ClientState::Disconnected => {
                                 commands.trigger_targets(Connect, entity);
@@ -117,6 +122,54 @@ pub(crate) fn spawn_connect_button(app: &mut App) {
                         };
                     },
                 );
+        });
+}
+
+fn spawn_mode_controls(app: &mut App) {
+    app.world_mut()
+        .spawn(Node {
+            width: Val::Percent(50.0),
+            height: Val::Px(60.0),
+            position_type: PositionType::Absolute,
+            top: Val::Px(10.0),
+            left: Val::Px(10.0),
+            align_items: AlignItems::Center,
+            justify_content: JustifyContent::FlexStart,
+            flex_direction: FlexDirection::Row,
+            ..default()
+        })
+        .with_children(|parent| {
+            parent.spawn((
+                Text("Mode: Preview".to_string()),
+                TextColor(Color::srgb(0.9, 0.9, 0.9)),
+                TextFont::from_font_size(18.0),
+                ModeText,
+            ));
+            parent
+                .spawn((
+                    Text("Toggle Edit (F5)".to_string()),
+                    TextColor(Color::srgb(0.1, 0.9, 0.9)),
+                    TextFont::from_font_size(18.0),
+                    ToggleModeButton,
+                    Node {
+                        width: Val::Px(200.0),
+                        height: Val::Px(40.0),
+                        border: UiRect::all(Val::Px(2.0)),
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        ..default()
+                    },
+                    Button,
+                ))
+                .observe(|_: Trigger<Pointer<Click>>, mut mode: ResMut<EditorState>| {
+                    mode.0 = match mode.0 { EditorMode::Edit => EditorMode::Preview, EditorMode::Preview => EditorMode::Edit };
+                    info!("HCL EditorMode -> {:?}", mode.0);
+                });
+            parent.spawn((
+                Text("In Edit: F6 to publish demo, 1/2 to swap color".to_string()),
+                TextColor(Color::srgb(0.8, 0.8, 0.8).with_alpha(0.7)),
+                TextFont::from_font_size(14.0),
+            ));
         });
 }
 
@@ -142,8 +195,16 @@ pub(crate) fn update_button_text(
     }
 }
 
-/// Component to identify the text displaying the client id
+fn update_mode_text(mode: Res<EditorState>, mut q: Query<&mut Text, With<ModeText>>) {
+    if let Ok(mut text) = q.get_single_mut() {
+        text.0 = match mode.0 {
+            EditorMode::Edit => "Mode: Edit".to_string(),
+            EditorMode::Preview => "Mode: Preview".to_string(),
+        };
+    }
+}
 
+/// Component to identify the text displaying the client id
 #[derive(Component)]
 pub struct ClientIdText;
 

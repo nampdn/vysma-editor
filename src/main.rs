@@ -26,14 +26,14 @@ fn main() {
 
     let mut app = cli.build_app(Duration::from_secs_f64(1.0 / FIXED_TIMESTEP_HZ), true);
     app.add_plugins(SharedPlugin);
-    // HCL: add plugin and load a more complex scene at startup
-    app.add_plugins(bevy_in_app::hcl::HclPlugin);
-    app.add_systems(Startup, bevy_in_app::hcl::load_scene_at_startup("moba_hcl/moba_game.hcl"));
-    cli.spawn_connections(&mut app);
 
     match cli.mode {
         #[cfg(feature = "client")]
         Some(Mode::Client { .. }) => {
+            // Client: run full HCL authoring/runtime and load example project scene
+            app.add_plugins(bevy_in_app::hcl::HclPlugin);
+            app.add_systems(Startup, bevy_in_app::hcl::load_scene_at_startup("moba_hcl/moba_game.hcl"));
+
             use lightyear::prelude::Client;
             app.add_plugins(VysmaClientPlugin);
             let client = app
@@ -52,16 +52,20 @@ fn main() {
         }
         #[cfg(feature = "server")]
         Some(Mode::Server { .. }) => {
+            // Server: only handle HCL networking (updates + publishing). Do not run HCL runtime/spawn.
+            app.add_plugins(bevy_in_app::hcl::net::HclNetPlugin);
             app.add_plugins(VysmaServerPlugin);
         }
         #[cfg(all(feature = "client", feature = "server"))]
-        Some(Mode::HostClient { client_id }) => {
+        Some(Mode::HostClient { client_id: _ }) => {
+            // Host-client: run full HCL (for preview/authoring) and both client/server plugins
+            app.add_plugins(bevy_in_app::hcl::HclPlugin);
+            app.add_systems(Startup, bevy_in_app::hcl::load_scene_at_startup("moba_hcl/moba_game.hcl"));
             app.add_plugins(VysmaClientPlugin);
             app.add_plugins(VysmaServerPlugin);
         }
         _ => {}
     }
-    // let mut bevy_app = bevy_in_app::create_breakout_app();
 
     #[cfg(feature = "gui")]
     app.add_plugins(RendererPlugin);

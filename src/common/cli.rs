@@ -9,7 +9,7 @@ use clap::{Parser, Subcommand};
 use rand::random;
 
 #[cfg(feature = "client")]
-use super::client_network::{ClientNetwork, ClientTransports, connect};
+use super::client_network::{connect, ClientNetwork, ClientTransports};
 #[cfg(all(feature = "gui", feature = "client"))]
 use super::renderer::ClientRendererPlugin;
 use crate::common::shared::{CLIENT_PORT, SERVER_ADDR, SERVER_PORT, SHARED_SETTINGS};
@@ -17,7 +17,7 @@ use crate::common::shared::{CLIENT_PORT, SERVER_ADDR, SERVER_PORT, SHARED_SETTIN
 use bevy::window::{PresentMode, Window, WindowPlugin};
 
 use lightyear::link::RecvLinkConditioner;
-use lightyear::prelude::{Client, LinkConditionerConfig, LinkOf};
+use lightyear::prelude::LinkConditionerConfig;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -51,6 +51,8 @@ impl Cli {
                     #[cfg(feature = "gui")]
                     ClientRendererPlugin::new(format!("Client {client_id:?}")),
                 ));
+                // set up networking entities
+                self.spawn_connections(&mut app);
                 app
             }
             #[cfg(feature = "server")]
@@ -66,24 +68,22 @@ impl Cli {
                 app.add_steam_resources(STEAM_APP_ID);
                 app.add_plugins((
                     lightyear::prelude::server::ServerPlugins { tick_duration },
-                    // #[cfg(feature = "gui")]
-                    // ServerRendererPlugin::new("Server".to_string()),
                 ));
+                // set up networking entities
+                self.spawn_connections(&mut app);
                 app
             }
             #[cfg(all(feature = "client", feature = "server"))]
-            Some(Mode::HostClient { client_id }) => {
+            Some(Mode::HostClient { client_id: _ }) => {
                 let mut app = new_gui_app(add_inspector);
                 #[cfg(feature = "steam")]
                 app.add_steam_resources(STEAM_APP_ID);
                 app.add_plugins((
                     lightyear::prelude::client::ClientPlugins { tick_duration },
                     lightyear::prelude::server::ServerPlugins { tick_duration },
-                    // #[cfg(feature = "gui")]
-                    // ExampleClientRendererPlugin::new(format!("Host-Client {client_id:?}")),
-                    // #[cfg(feature = "gui")]
-                    // ExampleServerRendererPlugin::new("Host-Server".to_string()),
                 ));
+                // set up networking entities
+                self.spawn_connections(&mut app);
                 app
             }
             None => {
@@ -100,7 +100,7 @@ impl Cli {
         match self.mode {
             #[cfg(feature = "client")]
             Some(Mode::Client { client_id }) => {
-                let client = app
+                let _client = app
                     .world_mut()
                     .spawn(ClientNetwork {
                         client_id: client_id.expect("You need to specify a client_id via `-c ID`"),
@@ -118,11 +118,9 @@ impl Cli {
             }
             #[cfg(feature = "server")]
             Some(Mode::Server) => {
-                use crate::common::server_network::{
-                    ServerNetwork, ServerTransports, WebTransportCertificateSettings, start,
-                };
+                use crate::common::server_network::{start, ServerNetwork, ServerTransports};
 
-                let server = app
+                let _server = app
                     .world_mut()
                     .spawn(ServerNetwork {
                         conditioner: None,
@@ -146,38 +144,8 @@ impl Cli {
                 app.add_systems(Startup, start);
             }
             #[cfg(all(feature = "client", feature = "server"))]
-            Some(Mode::HostClient { client_id }) => {
-                // Spawn the client and server connections here
-                // This is where you would set up the client and server entities
-                // let server = app
-                //     .world_mut()
-                //     .spawn(ExampleServer {
-                //         conditioner: None,
-                //         // transport: ServerTransports::Udp {
-                //         //     local_port: SERVER_PORT,
-                //         // },
-                //         transport: ServerTransports::WebTransport {
-                //             local_port: SERVER_PORT,
-                //             certificate: WebTransportCertificateSettings::FromFile {
-                //                 cert: "../../certificates/cert.pem".to_string(),
-                //                 key: "../../certificates/key.pem".to_string(),
-                //             },
-                //         },
-                //         shared: SHARED_SETTINGS,
-                //     })
-                //     .id();
-
-                // let client = app
-                //     .world_mut()
-                //     .spawn((
-                //         Client::default(),
-                //         Name::new("HostClient"),
-                //         LinkOf { server },
-                //     ))
-                //     .id();
-                // // NOTE: it's ugly but i believe that you need to start the server before
-                // //  connecting the host-client for things to work properly
-                // app.add_systems(Startup, (start, connect).chain());
+            Some(Mode::HostClient { client_id: _ }) => {
+                // See commented example for spawning both server and client
             }
             _ => {}
         }
@@ -295,6 +263,7 @@ pub fn new_gui_app(add_inspector: bool) -> App {
             .set(AssetPlugin {
                 // https://github.com/bevyengine/bevy/issues/10157
                 meta_check: bevy::asset::AssetMetaCheck::Never,
+                watch_for_changes_override: Some(true),
                 ..default()
             })
             .set(log_plugin())
@@ -302,16 +271,16 @@ pub fn new_gui_app(add_inspector: bool) -> App {
     );
 
     #[allow(unused_mut)]
-    let mut default_plugins = DefaultPlugins.build();
+    let mut _default_plugins = DefaultPlugins.build();
 
     #[cfg(any(target_os = "android", target_os = "ios"))]
     {
-        default_plugins = default_plugins
+        _default_plugins = _default_plugins
             .disable::<WinitPlugin>()
             .set(WindowPlugin::default());
 
         app.insert_resource(ClearColor(Color::srgb(0.8, 0.4, 0.6)))
-            .add_plugins(default_plugins);
+            .add_plugins(_default_plugins);
     }
 
     #[cfg(feature = "visualizer")]

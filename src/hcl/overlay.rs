@@ -33,7 +33,7 @@ fn setup_overlay(mut commands: Commands, mut cfg: ResMut<HclOverlayConfig>) {
         cfg.max_recent = 5;
     }
     // 2D camera for overlay
-    commands.spawn((Camera2dBundle::default(), HclOverlayCamera));
+    // commands.spawn((Camera2dBundle::default(), HclOverlayCamera));
     // Text2d near top-left; exact position will be adjusted each frame
     commands.spawn((
         Text2dBundle {

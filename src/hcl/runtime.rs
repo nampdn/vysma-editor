@@ -75,7 +75,14 @@ pub fn process_triggers(
     mut q_mat: Query<(Entity, Option<&Name>, Option<&HclTags>, Option<&mut bevy::pbr::MeshMaterial3d<StandardMaterial>>)>,
     registry: Res<crate::hcl::registry::ComponentRegistry>,
     mut ctx: ResMut<ApplyCtx>,
+    // Editor mode gate
+    mode: Option<Res<crate::hcl::EditorState>>,
 ) {
+    // Pause gameplay logic in Edit mode
+    if let Some(mode) = mode.as_ref() {
+        if matches!(mode.0, crate::hcl::EditorMode::Edit) { return; }
+    }
+
     // Lazy compile when the entry scene is available
     if let Some(entry) = entry.as_ref().and_then(|e| e.0.as_ref()) {
         if let Some(asset) = assets.get(entry) {
