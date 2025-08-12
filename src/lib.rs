@@ -25,16 +25,13 @@ pub use input_binding::*;
 #[cfg(target_os = "android")]
 mod android_asset_io;
 
-mod breakout_game;
+pub mod hcl;
 pub mod client;
 pub mod common;
-mod lighting_demo;
 mod protocol;
 pub mod renderer;
 pub mod server;
-mod shapes_demo;
 pub mod shared;
-mod stepping;
 mod input_binding;
 
 #[allow(unused_variables)]

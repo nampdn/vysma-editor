@@ -6,7 +6,7 @@ pub const SERVER_PORT: u16 = 5000;
 /// 0 means that the OS will assign any available port
 pub const CLIENT_PORT: u16 = 0;
 pub const SERVER_ADDR: SocketAddr =
-    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(192, 168, 0, 103)), SERVER_PORT);
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), SERVER_PORT);
 pub const SHARED_SETTINGS: SharedSettings = SharedSettings {
     protocol_id: 0,
     private_key: [

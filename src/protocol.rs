@@ -1,8 +1,8 @@
 use bevy::ecs::entity::MapEntities;
 use bevy::prelude::*;
-use lightyear::input::native::plugin::InputPlugin;
 use lightyear::prelude::*;
 use serde::{Deserialize, Serialize};
+use crate::hcl::net::HclSceneBlob;
 
 // Components
 #[derive(Component, Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -67,7 +67,7 @@ impl Default for Inputs {
 
 // Inputs must all implement MapEntities
 impl MapEntities for Inputs {
-    fn map_entities<M: EntityMapper>(&mut self, entity_mapper: &mut M) {}
+    fn map_entities<M: EntityMapper>(&mut self, _entity_mapper: &mut M) {}
 }
 
 pub(crate) struct ProtocolPlugin;
@@ -101,5 +101,10 @@ impl Plugin for ProtocolPlugin {
             .add_prediction(PredictionMode::Full)
             .add_interpolation(InterpolationMode::Full)
             .add_linear_interpolation_fn();
+
+        // HCL networked scene blob: replicated once on change
+        app.register_component::<HclSceneBlob>()
+            .add_prediction(PredictionMode::Once)
+            .add_interpolation(InterpolationMode::Once);
     }
 }
