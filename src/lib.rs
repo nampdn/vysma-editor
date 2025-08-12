@@ -25,7 +25,6 @@ pub use input_binding::*;
 #[cfg(target_os = "android")]
 mod android_asset_io;
 
-pub mod hcl;
 pub mod client;
 pub mod common;
 mod protocol;
@@ -33,6 +32,9 @@ pub mod renderer;
 pub mod server;
 pub mod shared;
 mod input_binding;
+
+// Re-export HCL from workspace crate during migration
+pub use vysma_hcl::hcl as hcl;
 
 #[allow(unused_variables)]
 pub fn create_breakout_app(

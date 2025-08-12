@@ -1,0 +1,39 @@
+[package]
+name = "vysma-hcl"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "vysma_hcl"
+crate-type = ["rlib"]
+
+[features]
+default = []
+client = ["lightyear/client"]
+server = ["lightyear/server", "lightyear/udp"]
+remote_assets = []
+hcl_overlay_ui = []
+
+[dependencies]
+bevy = { version = "0.16", default-features = true }
+lightyear = { version = "0.22.5", features = [
+    "input_native",
+    "interpolation",
+    "prediction",
+    "replication",
+    "netcode",
+] }
+serde = { version = "1", default-features = false, features = ["alloc", "derive"] }
+serde_json = "1"
+thiserror = "1"
+indexmap = { version = "2", features = ["serde"] }
+ahash = "0.8"
+once_cell = "1.19"
+anyhow = "1"
+sha2 = "0.10"
+hcl-rs = "0.19.2"
+evalexpr = "11"
+log = "0.4"
+
+# Optional for remote asset helpers
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking"], optional = true } 

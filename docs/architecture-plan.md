@@ -25,6 +25,7 @@ Links:
 
 ### Feature Matrix
 
+- **Workspace split; crates for HCL and Cloud** — [x] Done (crates: `vysma-hcl`, `vysma-cloud`)
 - **HCL core (loader/runtime/spawn/hot‑reload/timers/actions/includes)** — [x] Done
 - **Editor/Preview mode resource + toggle (F5 + GUI button)** — [x] Done
 - **Trigger gating in Edit mode** — [x] Done
@@ -60,6 +61,8 @@ Legend: [x] implemented in code; [ ] not yet.
 ---
 
 ### Phased Plan (each step should build green)
+
+Current status: Phase 0 completed (workspace split, HCL crate extraction). Next: Phase 1.
 
 Phase 1: Remote Module Resolve (MVP)
 - Implement `cloud::appwrite_client` (read‑only) using `unofficial_appwrite`.

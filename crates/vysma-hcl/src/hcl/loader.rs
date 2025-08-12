@@ -4,8 +4,6 @@ use bevy::{
     prelude::*,
 };
 use thiserror::Error;
-// Prefer fully qualified logging to avoid macro ambiguity
-
 
 #[derive(Asset, TypePath, Debug, Clone)]
 pub struct HclSceneAsset {
@@ -320,4 +318,4 @@ fn collect_vars_from_block(dst: &mut indexmap::IndexMap<String, f64>, block: &hc
         }
     }
     Ok(())
-}
+} 
