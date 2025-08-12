@@ -75,6 +75,7 @@ pub fn hot_reload(
 ) {
     for ev in events.read() {
         if let bevy::asset::AssetEvent::Modified { id } = *ev {
+            println!("hot reload: {:?}", id);
             if let Some(handle) = asset_server.get_id_handle(id) {
                 if let Some(root) = spawner.spawned_roots.get(&handle) {
                     persist.0.clear();

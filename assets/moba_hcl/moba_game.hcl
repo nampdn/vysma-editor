@@ -55,7 +55,7 @@ entity "root" {
       components = {
         MeshRef = { mesh = "cube" }
         StandardMaterialRef = { material = "enemy" }
-        Transform = { t = [6, 1, 0], s = [1.5, 1.5, 1.5] }
+        Transform = { t = [7, 1, 0], s = [1.5, 1.5, 1.5] }
       }
       tags = ["enemy"]
     },
