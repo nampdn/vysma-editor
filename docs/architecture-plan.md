@@ -35,7 +35,7 @@ Links:
 - **Server publish prefers content (content‑first)** — [x] Done (fallback to path if unreadable)
 - **Module loader + registry types** — [x] Done (not wired to spawn)
 - **Module import by `username::module` via Appwrite** — [x] Done (runtime reads via `unofficial_appwrite`)
-- **Module publishing CLI to Appwrite** — [x] Done (populate script creates module + version)
+- **Module publishing CLI to Appwrite** — [x] Done (`vysma` crate: module publish + assets upload)
 - **Scene persistence to Appwrite on update** — [ ] Planned (MVP+)
 - **HTTP Asset IO (load glTF/images via URLs)** — [ ] Planned (MVP+)
 - **Desktop editor text UI (Apply + status)** — [ ] Planned (MVP)
@@ -62,7 +62,7 @@ Legend: [x] implemented in code; [ ] not yet.
 
 ### Phased Plan (each step should build green)
 
-Current status: Phase 1 completed (remote module resolve wired; populate publishes modules/versions). Next: Phase 2.
+Current status: Phase 1 completed (remote module resolve wired). Phase 2: CLI implemented with assets upload. Next: cross‑machine import test; then Phase 3.
 
 Phase 1: Remote Module Resolve (MVP)
 - Implement `cloud::appwrite_client` (read‑only) using `unofficial_appwrite`. — [x] Done
@@ -71,8 +71,8 @@ Phase 1: Remote Module Resolve (MVP)
 - Acceptance: HCL can import `username::module` and spawn with namespacing. — [x] Met
 
 Phase 2: Module Publishing CLI (MVP)
-- Add CLI: `module publish --name <module> --version <v> --owner <username> --hcl <file> [--assets <dir>]`. — [x] First pass via `scripts/populate_modules.rs`
-- Create or update module; create version with HCL; upload assets to Storage (optional for first pass). — [x] Module + version supported; assets: planned
+- Add CLI: `module publish --name <module> --version <v> --owner <username> --hcl <file> [--assets <dir>]`. — [x] Implemented (`vysma`)
+- Create or update module; create version with HCL; upload assets to Storage (basic). — [x] Supported
 - Acceptance: Another machine can import the published module by name. — [ ] Pending cross‑machine test
 
 Phase 3: Editor UI + Auth (MVP)

@@ -40,14 +40,22 @@ Runtime implementation:
   - Args: `--owner <username> --name <module> --version <v> --hcl <file> [--assets <dir>] [--visibility public|private] [--desc <text>]`
   - Steps:
     1) Read HCL; compute SHA256.
-    2) Create module if missing; else validate ownership.
-    3) Create module version with HCL and sha.
-    4) Optionally upload assets under deterministic keys `username/module/version/<relpath>` to `module-assets` bucket.
-    5) Update Modules.latestVersion if desired.
-  - Output: IDs and URLs; print next import line.
+    2) Create module if missing (id = `owner__name`); set `latestVersion`.
+    3) Create module version with HCL and sha (id = `owner__name__version`).
+    4) Optionally upload assets under deterministic keys `owner/name/version/<relpath>` to `module-assets` bucket.
+    5) If `APPWRITE_MODULE_ASSETS_INDEX_COLLECTION_ID` is set, create index docs per file.
+    6) Update Modules.latestVersion when `--set-latest` is enabled (default true).
+  - Output: IDs and URLs; print recommended import line.
 
-Status:
-- First pass available via `scripts/populate_modules.rs` (creates required attributes, module, version). Assets upload deferred.
+CLI crate: `vysma`
+
+Example:
+```
+cargo run -p vysma -- module publish \
+  --owner alice --name axe --version 0.1.0 \
+  --hcl assets/moba_hcl/heroes/axe.hcl \
+  --assets assets/mesh/heroes
+```
 
 ### Server integration (runtime)
 - During spawn/hot‑reload:
@@ -64,7 +72,7 @@ Status:
 - [x] Namespacing applied to prefabs/entities/triggers/vars/assets
 - [ ] Module cache with invalidation by sha
 - [x] CLI: create module
-- [x] CLI: publish version (assets later)
+- [x] CLI: publish version (assets upload supported; optional index)
 - [ ] Docs: authoring guidance and examples
 
 ### Authoring example
