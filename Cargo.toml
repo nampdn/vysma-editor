@@ -2,6 +2,7 @@
 members = [
     "crates/vysma-hcl",
     "crates/vysma-cloud",
+    "crates/vysma",
 ]
 resolver = "2"
 

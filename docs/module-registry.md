@@ -16,7 +16,7 @@ Goal: allow developers to publish reusable HCL modules and import them by `usern
 ### Data model (Appwrite)
 - Collections
   - Modules: { id, ownerUserId, ownerUsername, name, latestVersion, visibility: "public"|"private", description?, tags? }
-  - ModuleVersions: { id, moduleId, version, sha256, hcl (text), createdAt }
+  - ModuleVersions: { id, moduleId, version, sha256, hcl (string), createdAt (datetime) }
   - ModuleAssetsIndex: { id, moduleVersionId, path, storageFileId, sha256, size }
 - Storage bucket: `module-assets`
 
@@ -24,6 +24,9 @@ Goal: allow developers to publish reusable HCL modules and import them by `usern
 - `GET latest` by (ownerUsername, name) → Module + ModuleVersions.latest
 - `GET version` by (ownerUsername, name, version) → ModuleVersion
 - `LIST assets` by moduleVersionId → list of asset refs with URLs
+
+Runtime implementation:
+- Uses `unofficial_appwrite` Rust SDK with queries: `equal(ownerUsername, ..)`, `equal(name, ..)`, `orderDesc($createdAt)`, `limit(1)`.
 
 ### Merge rules
 - Prefabs: include those listed in module's `exports` (if omitted, include all in MVP) → rename to `alias::PrefabName`.
@@ -43,22 +46,25 @@ Goal: allow developers to publish reusable HCL modules and import them by `usern
     5) Update Modules.latestVersion if desired.
   - Output: IDs and URLs; print next import line.
 
+Status:
+- First pass available via `scripts/populate_modules.rs` (creates required attributes, module, version). Assets upload deferred.
+
 ### Server integration (runtime)
 - During spawn/hot‑reload:
   - For each `ModuleImport` without `path` and `name` contains `::`: fetch ModuleVersion.hcl.
   - Parse to `SceneDoc` and call `merge_module_import` with alias.
-  - Cache resolved docs by `username::module@version`.
+  - Cache resolved docs by `username::module@version` (pending in‑memory cache).
 
 ### Security and visibility
 - Only public modules are resolved by default.
 - Private modules require project membership (future enhancement).
 
 ### Checklist
-- [ ] Resolve `username::module` imports via Appwrite
-- [ ] Namespacing applied to prefabs/entities/triggers/vars/assets
+- [x] Resolve `username::module` imports via Appwrite
+- [x] Namespacing applied to prefabs/entities/triggers/vars/assets
 - [ ] Module cache with invalidation by sha
-- [ ] CLI: create module
-- [ ] CLI: publish version + assets
+- [x] CLI: create module
+- [x] CLI: publish version (assets later)
 - [ ] Docs: authoring guidance and examples
 
 ### Authoring example

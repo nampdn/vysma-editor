@@ -1,0 +1,15 @@
+[package]
+name = "vysma"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4.5.4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking", "json", "multipart"] }
+dotenvy = "0.15"
+sha2 = "0.10"
+walkdir = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] } 

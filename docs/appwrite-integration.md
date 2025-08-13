@@ -11,9 +11,9 @@ Crate: `unofficial_appwrite` (server and CLI). Clients (editor) do not use serve
 Collections (Databases):
 - Projects: { id, ownerUserId, ownerUsername, name, createdAt }
 - Scenes: { id, projectId, name, publishedVersionId?, createdAt }
-- SceneVersions: { id, sceneId, sha256, hcl (text), authorUserId, createdAt }
+- SceneVersions: { id, sceneId, sha256, hcl (string), authorUserId, createdAt (datetime) }
 - Modules: { id, ownerUserId, ownerUsername, name, latestVersion, visibility: "public"|"private", description?, tags? }
-- ModuleVersions: { id, moduleId, version, sha256, hcl (text), createdAt }
+- ModuleVersions: { id, moduleId, version, sha256, hcl (string), createdAt (datetime) }
 - ModuleAssetsIndex: { id, moduleVersionId, path, storageFileId, sha256, size }
 
 Storage buckets:
@@ -22,10 +22,10 @@ Storage buckets:
 ---
 
 ### API wrapper (`cloud::appwrite_client`)
-- Config: `AppwriteConfig { endpoint, project_id, api_key }`
-- Client: initializes SDK objects (Databases, Storage)
+- Config: `AppwriteConfig { endpoint, project_id, api_key }` (endpoint normalized to include `/v1`)
+- Client: initializes SDK objects (Databases); uses query helpers (equal/orderDesc/limit)
 - Module APIs (MVP):
-  - `get_module_latest(username, name)` → Module + latest ModuleVersion
+  - `get_module_latest(username, name)` → ModuleVersion
   - `get_module_version(username, name, version)` → ModuleVersion
 - Scene APIs (MVP+):
   - `get_published_scene(project_id)` → SceneVersion
@@ -57,6 +57,9 @@ All functions return `anyhow::Result<T>`.
    - Merge into working doc with alias namespacing.
 2) Cache results keyed by `username::module@version`.
 
+Headers
+- Requests include: `X-Appwrite-Project`, `X-Appwrite-Key`, `X-Appwrite-Response-Format: 1.7.0`
+
 ---
 
 ### Security
@@ -67,10 +70,10 @@ All functions return `anyhow::Result<T>`.
 ---
 
 ### Checklist
-- [ ] Add `cloud::appwrite_client` (read‑only module fetch)
-- [ ] Env/config resource and initialization
-- [ ] Wire resolve into module loader/spawn
-- [ ] CLI: publish module (create module/version, upload assets)
+- [x] Add `cloud::appwrite_client` (read‑only module fetch)
+- [x] Env/config resource and initialization
+- [x] Wire resolve into module loader/spawn
+- [x] CLI: publish module (create module/version)
 - [ ] (MVP+) Persist scene on update; load on startup
 
 ---
