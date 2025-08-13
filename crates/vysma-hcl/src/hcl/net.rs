@@ -1,6 +1,7 @@
-use bevy::prelude::*;
+use bevy::{asset::io::{AssetReader, AssetReaderError, Reader, VecReader, PathStream, AssetSource, AssetSourceId}, prelude::*};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::{collections::HashMap, path::Path, sync::{Arc, Mutex}};
 use std::fs;
 use std::path::PathBuf;
 use std::time::SystemTime;
@@ -44,6 +45,47 @@ struct FileWatchState {
     last_path: Option<String>,
     last_mtime: Option<SystemTime>,
     last_sha: Option<String>,
+}
+
+#[cfg(feature = "http_assets")]
+pub struct HttpAssetIo {
+	cache: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+}
+
+#[cfg(feature = "http_assets")]
+impl Default for HttpAssetIo { fn default() -> Self { Self { cache: Arc::new(Mutex::new(HashMap::new())) } } }
+
+#[cfg(feature = "http_assets")]
+impl AssetReader for HttpAssetIo {
+	async fn read<'a>(&'a self, path: &'a Path) -> Result<impl Reader + 'a, AssetReaderError> {
+		let s = path.to_string_lossy();
+		let url = s.as_ref();
+		if !(url.starts_with("http://") || url.starts_with("https://")) {
+			return Err(AssetReaderError::NotFound(path.to_path_buf()));
+		}
+		if let Some(bytes) = self.cache.lock().unwrap().get(url).cloned() { return Ok(VecReader::new(bytes)); }
+		let bytes = async {
+			#[cfg(not(target_arch = "wasm32"))]
+			{ reqwest::get(url).await.map_err(|e| AssetReaderError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()).into()))?.bytes().await.map(|b| b.to_vec()).map_err(|e| AssetReaderError::Io(std::io::Error::new(std::io::ErrorKind::Other, e.to_string()).into())) }
+			#[cfg(target_arch = "wasm32")]
+			{ Err(AssetReaderError::Io(std::io::Error::new(std::io::ErrorKind::Other, "wasm http fetch not implemented"))) }
+		}.await?;
+		self.cache.lock().unwrap().insert(url.to_string(), bytes.clone());
+		Ok(VecReader::new(bytes))
+	}
+	async fn read_directory<'a>(&'a self, path: &'a Path) -> Result<Box<PathStream>, AssetReaderError> { Err(AssetReaderError::NotFound(path.to_path_buf())) }
+	async fn read_meta<'a>(&'a self, _path: &'a Path) -> Result<impl Reader + 'a, AssetReaderError> { Err::<VecReader, AssetReaderError>(AssetReaderError::Io(std::io::Error::new(std::io::ErrorKind::Other, "meta unsupported").into())) }
+	async fn is_directory<'a>(&'a self, _path: &'a Path) -> Result<bool, AssetReaderError> { Ok(false) }
+}
+
+#[cfg(feature = "http_assets")]
+pub struct HttpAssetIoPlugin;
+
+#[cfg(feature = "http_assets")]
+impl Plugin for HttpAssetIoPlugin {
+	fn build(&self, app: &mut App) {
+		app.register_asset_source(AssetSourceId::Default, AssetSource::build().with_reader(|| Box::new(HttpAssetIo::default())));
+	}
 }
 
 pub struct HclNetPlugin;

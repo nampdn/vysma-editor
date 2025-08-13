@@ -99,7 +99,7 @@ struct VersionData { moduleId: String, version: String, sha256: String, hcl: Str
 
 // Asset index
 #[derive(Serialize)]
-struct AssetIndexData { moduleVersionId: String, path: String, storageFileId: String, sha256: String, size: i64 }
+struct AssetIndexData { moduleVersionId: String, path: String, storageFileId: String, sha256: String, size: i64, original_path: String }
 
 #[derive(Deserialize)]
 struct CreatedFile { #[serde(rename = "$id")] id: String, #[serde(default)] sizeOriginal: Option<i64> }
@@ -193,12 +193,11 @@ fn create_version(http: &Client, api: &str, cfg: &AppwriteCfg, module_id: &str, 
 	Ok(version_doc_id)
 }
 
-fn create_asset_index(http: &Client, api: &str, cfg: &AppwriteCfg, version_doc_id: &str, path: &str, file_id: &str, sha: &str, size: i64) -> anyhow::Result<()> {
+fn create_asset_index(http: &Client, api: &str, cfg: &AppwriteCfg, version_doc_id: &str, path: &str, file_id: &str, sha: &str, size: i64, original_path: &str) -> anyhow::Result<()> {
 	let Some(index_col) = &cfg.assets_index_col else { return Ok(()); };
 	let url = format!("{}/databases/{}/collections/{}/documents", api, cfg.database, index_col);
-	let safe_path = path.replace('/', "__");
-	let doc_id = format!("{}__{}", version_doc_id, safe_path);
-	let body = CreateDoc { documentId: doc_id, data: AssetIndexData { moduleVersionId: version_doc_id.into(), path: path.into(), storageFileId: file_id.into(), sha256: sha.into(), size } };
+	let doc_id = format!("{}__{}", version_doc_id, sha);
+	let body = CreateDoc { documentId: doc_id, data: AssetIndexData { moduleVersionId: version_doc_id.into(), path: path.into(), storageFileId: file_id.into(), sha256: sha.into(), size, original_path: original_path.into() } };
 	let resp = headers(http.post(&url), cfg).json(&body).send()?;
 	if !resp.status().is_success() {
 		let status = resp.status();
@@ -214,13 +213,15 @@ fn upload_assets(http: &Client, api: &str, cfg: &AppwriteCfg, owner: &str, name:
 		let full_path = entry.path().to_path_buf();
 		let rel = full_path.strip_prefix(dir).unwrap();
 		let rel_str = rel.to_string_lossy();
-		let key_path = format!("{}/{}/{}/{}", owner, name, version, rel_str);
-		let url = format!("{}/storage/buckets/{}/files", api, cfg.assets_bucket_id);
 		let file_bytes = fs::read(&full_path)?;
 		let file_sha = sha256_hex_str(&file_bytes);
+		// namespaced hashed id and key
+		let file_id = format!("{}__{}__{}", owner, name, file_sha);
+		let key_path = format!("{}/{}/{}", owner, name, file_sha);
+		let url = format!("{}/storage/buckets/{}/files", api, cfg.assets_bucket_id);
 		let file_part = multipart::Part::bytes(file_bytes.clone()).file_name(rel_str.to_string());
 		let form = multipart::Form::new()
-			.text("fileId", "unique()")
+			.text("fileId", file_id.clone())
 			.text("x-appwrite-meta-key", key_path.clone())
 			.part("file", file_part);
 		let resp = http
@@ -231,13 +232,16 @@ fn upload_assets(http: &Client, api: &str, cfg: &AppwriteCfg, owner: &str, name:
 			.multipart(form)
 			.send()?;
 		if !resp.status().is_success() {
-			let status = resp.status();
-			let txt = resp.text().unwrap_or_default();
-			bail!("Asset upload failed {}: {}", status, txt);
+			// If already exists (409), continue; else error
+			if resp.status().as_u16() != 409 {
+				let status = resp.status();
+				let txt = resp.text().unwrap_or_default();
+				bail!("Asset upload failed {}: {}", status, txt);
+			}
 		}
-		let created: CreatedFile = resp.json()?;
-		let size = created.sizeOriginal.unwrap_or(0);
-		create_asset_index(http, api, cfg, version_doc_id, &rel_str, &created.id, &file_sha, size)?;
+		let created: Option<CreatedFile> = if resp.status().is_success() { Some(resp.json()?) } else { None };
+		let size = created.as_ref().and_then(|c| c.sizeOriginal).unwrap_or(0);
+		create_asset_index(http, api, cfg, version_doc_id, &key_path, &file_id, &file_sha, size, &rel_str)?;
 		count += 1;
 	}
 	Ok(count)

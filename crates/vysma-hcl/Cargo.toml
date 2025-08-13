@@ -13,6 +13,7 @@ client = ["lightyear/client"]
 server = ["lightyear/server", "lightyear/udp"]
 remote_assets = []
 hcl_overlay_ui = []
+http_assets = ["dep:reqwest"]
 
 [dependencies]
 bevy = { version = "0.16", default-features = true }

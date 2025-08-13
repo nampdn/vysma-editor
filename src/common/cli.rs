@@ -270,6 +270,12 @@ pub fn new_gui_app(add_inspector: bool) -> App {
             .set(window_plugin()),
     );
 
+    #[cfg(feature = "http_assets")]
+    {
+        use vysma_hcl::hcl::net::HttpAssetIoPlugin;
+        app.add_plugins(HttpAssetIoPlugin);
+    }
+
     #[allow(unused_mut)]
     let mut _default_plugins = DefaultPlugins.build();
 
