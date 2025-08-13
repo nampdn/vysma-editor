@@ -64,16 +64,19 @@ Legend: [x] implemented in code; [ ] not yet.
 
 Current status: Phase 1 completed (remote module resolve wired). Phase 2: CLI implemented with assets upload. Next: cross‑machine import test; then Phase 3.
 
-Phase 1: Remote Module Resolve (MVP)
-- Implement `cloud::appwrite_client` (read‑only) using `unofficial_appwrite`. — [x] Done
-- Implement `hcl::remote::RegistryResolver` used by `module_loader` when `name` contains `::` and `path` is empty. — [x] Done
-- Cache module `SceneDoc` by `username::name@version`. — [ ] Pending (in‑memory cache)
-- Acceptance: HCL can import `username::module` and spawn with namespacing. — [x] Met
+Phase 2.1: CLI DX foundation (MVP)
+- Add `vysma new <name>`: scaffold a game repo with example HCL and `assets/` layout.
+- Add `vysma serve`: run the server app with hot‑reload and log overlay; watch `assets/`.
+- Add `vysma client`: run a local client connected to `serve`.
+- Acceptance:
+  - Single command creates and runs a project locally; editing HCL hot‑reloads.
 
-Phase 2: Module Publishing CLI (MVP)
-- Add CLI: `module publish --name <module> --version <v> --owner <username> --hcl <file> [--assets <dir>]`. — [x] Implemented (`vysma`)
-- Create or update module; create version with HCL; upload assets to Storage (basic). — [x] Supported
-- Acceptance: Another machine can import the published module by name. — [ ] Pending cross‑machine test
+Phase 2.2: Content‑addressed assets + manifest (MVP)
+- Hashing: sha256 per file; IDs are sha prefix (≤32 chars); URL path `owner/name/<sha>.ext`.
+- Upload: idempotent (409 skip); parallel uploads with retries.
+- Manifest: embed manifest array into ModuleVersion; optional `ModuleAssetsIndex` rows.
+- Resolver: runtime maps `file` fields to URL paths via manifest; local paths remain for dev.
+- Acceptance: remote client loads module assets via CDN URLs with HTTP asset IO enabled.
 
 Phase 3: Editor UI + Auth (MVP)
 - Desktop GUI: multiline text area, Apply, mode toggle, status (sha/error).
@@ -86,15 +89,37 @@ Phase 4: Scene Persistence (MVP+)
 - Acceptance: Restart preserves the current scene.
 
 Phase 5: HTTP Asset IO (MVP+)
-- Implement `HttpAssetIo` for http(s) URLs; integrate in `AssetPlugin` setup.
-- Update docs to prefer `url = "https://..."` for `image`/`gltf` in HCL.
+- Implement `HttpAssetIo` for http(s) URLs; integrate via feature flag `http_assets`.
+- Add in‑memory cache; later, add disk cache under `~/.vysma/cache/`.
 - Acceptance: Assets load over HTTP across native/wasm.
 
-Post‑MVP
-- Rollback to previous version.
-- Flatten publish (single doc) to simplify distribution.
-- Multi‑file HCL updates in a single message.
-- Rate limiting, metrics, and more robust editor tooling.
+---
+
+### Detailed implementation tasks (DX‑centric)
+
+CLI (`vysma`)
+- new:
+  - Create directories: `assets/scenes`, `assets/mesh`, `assets/textures`.
+  - Add example `scenes/moba_game.hcl` and README.
+  - Optionally init git and write `.gitignore` (target/, .DS_Store).
+- serve:
+  - Build and run server binary with watch (`cargo watch` optional) and hot‑reload enabled.
+  - Print URLs and keybindings; surface parse errors live.
+- client:
+  - Run client with connection to local server; pass flags for renderer/GUI.
+- publish:
+  - Validate env, read HCL, compute sha.
+  - Upload deduped assets (parallel), build manifest, create module/version.
+  - Print import snippet and resolved assets table.
+
+Runtime
+- Keep manifest alongside imported module; inject into `ApplyCtx` for asset resolution.
+- Fallback: if manifest missing, use `file` directly.
+
+Docs
+- Update HCL spec to emphasize name‑based references and relative paths.
+- Add quickstart using `vysma new` + `vysma serve` + editing HCL.
+- Document `http_assets` feature flag usage.
 
 ---
 

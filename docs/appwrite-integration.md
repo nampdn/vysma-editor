@@ -13,11 +13,15 @@ Collections (Databases):
 - Scenes: { id, projectId, name, publishedVersionId?, createdAt }
 - SceneVersions: { id, sceneId, sha256, hcl (string), authorUserId, createdAt (datetime) }
 - Modules: { id, ownerUserId, ownerUsername, name, latestVersion, visibility: "public"|"private", description?, tags? }
-- ModuleVersions: { id, moduleId, version, sha256, hcl (string), createdAt (datetime) }
-- ModuleAssetsIndex: { id, moduleVersionId, path, storageFileId, sha256, size }
+- ModuleVersions: { id, moduleId, version, sha256, hcl (string), manifest (json), createdAt (datetime) }
+- ModuleAssetsIndex: { id, moduleVersionId, path, storageFileId, sha256, size, original_path, content_type? }
 
 Storage buckets:
 - `module-assets` (public or signed URLs)
+
+Notes
+- `ModuleVersions.manifest` captures per-version assets: [{ original_path, sha256, size, url_path, content_type? }]
+- `url_path` is a relative path like `owner/name/<sha256>.ext` (base URL resolved on client)
 
 ---
 
@@ -32,7 +36,7 @@ Storage buckets:
   - `create_scene_version(scene_id, hcl, sha, author)` → SceneVersion
   - `publish_scene(scene_id, version_id)` → update Scenes.publishedVersionId
 - Upload (CLI):
-  - `upload_asset(bucket, local_path, dst_key)` → returns URL and file id
+  - `upload_asset(bucket, local_path, dst_key, file_id)` → returns file id and size
 
 All functions return `anyhow::Result<T>`.
 
@@ -55,7 +59,16 @@ All functions return `anyhow::Result<T>`.
    - If `version` missing → fetch latest; else fetch that version.
    - Parse ModuleVersion.hcl → `SceneDoc`.
    - Merge into working doc with alias namespacing.
-2) Cache results keyed by `username::module@version`.
+2) If `manifest` present → keep it in memory for URL resolution of `file` fields to CDN paths.
+3) Cache results keyed by `username::module@version`.
+
+### Asset publish flow (CLI)
+1) For each referenced local file path (from HCL):
+   - Read bytes → compute sha256.
+   - Derive `file_id` = first 32 hex chars (Appwrite limit) and `url_path` = `owner/name/<sha256>.<ext>`.
+   - Upload to storage bucket if missing (`409` → skip).
+   - Create `ModuleAssetsIndex` row with { moduleVersionId, path = url_path, storageFileId = file_id, sha256, size, original_path, content_type? } (optional).
+2) Create `ModuleVersions` doc with embedded `manifest` array for this version.
 
 Headers
 - Requests include: `X-Appwrite-Project`, `X-Appwrite-Key`, `X-Appwrite-Response-Format: 1.7.0`
@@ -73,8 +86,9 @@ Headers
 - [x] Add `cloud::appwrite_client` (read‑only module fetch)
 - [x] Env/config resource and initialization
 - [x] Wire resolve into module loader/spawn
-- [x] CLI: publish module (create module/version)
+- [x] CLI: publish module (create module/version + manifest; hashed assets upload)
 - [ ] (MVP+) Persist scene on update; load on startup
+- [ ] (MVP+) Private module auth path
 
 ---
 

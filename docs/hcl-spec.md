@@ -4,6 +4,13 @@ This document is the developer‑facing reference for writing HCL scenes and mod
 
 HCL files live under `assets/` (e.g., `assets/scenes/moba_game.hcl`). The engine hot‑reloads edited files.
 
+## Authoring Philosophy (DX/UX)
+
+- Human‑readable first: You define assets by name and local relative paths. You never paste hashes or opaque URLs in HCL.
+- Name references everywhere: Components refer to assets by their declared names (`image = "HeroIcon"`, `scene = "Axe"`).
+- Relative paths resolve locally: `file = "textures/hero.png"` is local while developing.
+- Remote resolution is automatic: When you publish a module, the CLI generates a manifest (path → sha/url). At runtime, the engine maps `file` to a remote URL using the manifest—no HCL changes needed.
+
 ## Top‑Level Structure
 
 A scene file is a single document with optional attributes and blocks:
@@ -32,8 +39,13 @@ Define meshes, materials, images, and glTF scenes referenced by components:
 
 - mesh "name" { builtin = "cube" | "plane" }
 - material "name" { pbr = { base_color = "#rrggbb" | {r,g,b,a?}, metallic = f32?, roughness = f32?, emissive = color? } }
-- image "name" { file = "textures/.." }
-- gltf "name" { file = "mesh/...glb", node = "NodeName"? }
+- image "name" { file = "textures/..." }
+- gltf  "name" { file = "mesh/...glb", node = "NodeName"? }
+
+Notes
+- Local workflow: `file` is a relative path you keep in your repo.
+- Remote workflow: When running a published module, the engine uses the module manifest to map `file` to a CDN URL (e.g., `owner/name/<sha256>.ext`). No HCL changes are required.
+- You may also specify `url` instead of `file` for advanced cases; the loader will treat `url` as a remote path directly.
 
 The loader builds a per‑scene `ApplyCtx` with handles to these assets. `SceneRef` uses `gltf` entries.
 
@@ -148,7 +160,7 @@ Expressions are evaluated with `evalexpr` against the current variable map.
 ## Includes and Modules
 
 - includes = ["scenes/common.hcl"] merges another document: assets, prefabs, entities, triggers, and vars.
-- modules/exports (early): allows namespacing of prefabs/entities/triggers/vars and asset names. Module merging resolves `alias::Name` to prevent collisions.
+- modules/exports: allows namespacing of prefabs/entities/triggers/vars and asset names. Module merging resolves `alias::Name` to prevent collisions.
 
 ## Debugging and Overlay
 
@@ -157,14 +169,6 @@ Expressions are evaluated with `evalexpr` against the current variable map.
 - Optional on‑screen overlay plugin exists behind Cargo feature `hcl_overlay_ui` and renders text using a 2D camera. To enable:
   - In Cargo.toml, add feature `hcl_overlay_ui` to the `bevy-in-app` crate.
   - Build with `--features hcl_overlay_ui`.
-
-## Authoring Patterns
-
-- Movement: `translate_axis` with `speed_var` and `use_dt = true`.
-- Combat gating: modify vars (e.g., `enemy_hp`), then `when = [{ expr = "enemy_hp <= 0" }]` to drive despawn.
-- Respawn/Waves: periodic `tick` + conditional spawn when no entities visible (`when = [{ not = { all_visible = { name = "Enemy" } } }]`).
-- Chaining logic: `emit` an event, then a separate trigger with `on = { event = "..." }` applies further actions.
-- Apply on demand: use `apply` to write back into Transform or material without creating new appliers.
 
 ## Roadmap (Planned)
 

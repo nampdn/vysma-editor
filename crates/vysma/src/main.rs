@@ -215,8 +215,8 @@ fn upload_assets(http: &Client, api: &str, cfg: &AppwriteCfg, owner: &str, name:
 		let rel_str = rel.to_string_lossy();
 		let file_bytes = fs::read(&full_path)?;
 		let file_sha = sha256_hex_str(&file_bytes);
-		// namespaced hashed id and key
-		let file_id = format!("{}__{}__{}", owner, name, file_sha);
+		// namespaced path uses full sha; fileId must be <=36 and restricted charset → use sha prefix
+		let file_id = file_sha.chars().take(32).collect::<String>();
 		let key_path = format!("{}/{}/{}", owner, name, file_sha);
 		let url = format!("{}/storage/buckets/{}/files", api, cfg.assets_bucket_id);
 		let file_part = multipart::Part::bytes(file_bytes.clone()).file_name(rel_str.to_string());
