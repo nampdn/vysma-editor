@@ -27,6 +27,9 @@ fn main() {
     let mut app = cli.build_app(Duration::from_secs_f64(1.0 / FIXED_TIMESTEP_HZ), true);
     app.add_plugins(SharedPlugin);
 
+    // Install Appwrite provider if env vars are present (for remote module resolve)
+    vysma_cloud::install_appwrite_provider_if_env(&mut app);
+
     match cli.mode {
         #[cfg(feature = "client")]
         Some(Mode::Client { .. }) => {

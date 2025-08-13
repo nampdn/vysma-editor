@@ -646,8 +646,10 @@ dependencies = [
  "bevy_platform",
  "bevy_tasks",
  "cfg-if",
+ "chrono",
  "clap",
  "core-graphics 0.25.0",
+ "dotenvy",
  "evalexpr",
  "hcl-rs",
  "indexmap",
@@ -672,6 +674,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tracing",
  "uuid",
+ "vysma-cloud",
  "vysma-hcl",
  "wgpu",
 ]
@@ -2673,6 +2676,12 @@ checksum = "95249b50c6c185bee49034bcb378a49dc2b5dff0be90ff6616d31d64febab05d"
 dependencies = [
  "litrs",
 ]
+
+[[package]]
+name = "dotenvy"
+version = "0.15.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
 
 [[package]]
 name = "downcast-rs"
@@ -7626,11 +7635,14 @@ name = "vysma-cloud"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bevy",
  "reqwest",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "tokio",
  "unofficial_appwrite",
+ "vysma-hcl",
 ]
 
 [[package]]

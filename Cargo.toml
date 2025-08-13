@@ -19,6 +19,14 @@ authors = ["jinleili"]
 edition = "2024"
 rust-version = "1.85"
 
+[[bin]]
+name = "populate_modules"
+path = "scripts/populate_modules.rs"
+
+[[bin]]
+name = "check_appwrite"
+path = "scripts/check_appwrite.rs"
+
 [lib]
 crate-type = ["rlib", "staticlib", "cdylib"]
 
@@ -100,11 +108,14 @@ rand = "0.9.2"
 hcl-rs = "0.19.2"
 anyhow = "1"
 sha2 = "0.10"
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking"], optional = true }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "blocking", "json"] }
 evalexpr = "11"
+dotenvy = "0.15"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 # New internal crates
 vysma-hcl = { path = "crates/vysma-hcl" }
+vysma-cloud = { path = "crates/vysma-cloud" }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 core-graphics = "*"
