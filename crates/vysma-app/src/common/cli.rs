@@ -19,6 +19,9 @@ use bevy::window::{PresentMode, Window, WindowPlugin};
 use lightyear::link::RecvLinkConditioner;
 use lightyear::prelude::LinkConditionerConfig;
 
+mod window;
+mod log;
+
 #[derive(Parser, Debug)]
 #[command(version, about)]
 pub struct Cli {
@@ -223,30 +226,6 @@ pub fn cli() -> Cli {
 }
 
 #[cfg(feature = "gui")]
-pub fn window_plugin() -> WindowPlugin {
-    WindowPlugin {
-        primary_window: Some(Window {
-            title: "Vysma Editor".to_string(),
-            resolution: (1280.0, 720.0).into(),
-            present_mode: PresentMode::AutoVsync,
-            prevent_default_event_handling: true,
-            ..Default::default()
-        }),
-        ..default()
-    }
-}
-
-pub fn log_plugin() -> LogPlugin {
-    LogPlugin {
-        level: Level::INFO,
-        filter: "wgpu=error,bevy_render=info,bevy_ecs=warn,bevy_time=warn".to_string(),
-        // we don't want to spam the console with debug logs
-        // from the bevy inspector
-        ..default()
-    }
-}
-
-#[cfg(feature = "gui")]
 pub fn new_gui_app(add_inspector: bool) -> App {
     #[allow(unused_imports)]
     use bevy::winit::WinitPlugin;
@@ -266,8 +245,8 @@ pub fn new_gui_app(add_inspector: bool) -> App {
                 watch_for_changes_override: Some(true),
                 ..default()
             })
-            .set(log_plugin())
-            .set(window_plugin()),
+            .set(log::log_plugin())
+            .set(window::window_plugin()),
     );
 
     #[cfg(feature = "http_assets")]
@@ -309,7 +288,7 @@ pub fn new_headless_app() -> App {
     let mut app = App::new();
     app.add_plugins((
         MinimalPlugins,
-        log_plugin(),
+        log::log_plugin(),
         StatesPlugin,
         DiagnosticsPlugin,
     ));

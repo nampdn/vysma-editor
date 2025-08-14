@@ -11,6 +11,10 @@ crate-type = ["rlib"]
 client = ["lightyear/client"]
 server = ["lightyear/server", "lightyear/udp"]
 gui = ["bevy/bevy_winit", "bevy/bevy_window", "bevy/bevy_ui"]
+http_assets = ["vysma-hcl/http_assets"]
+visualizer = []
+steam = []
+bevygap_client = []
 
 [dependencies]
 bevy = { version = "0.16", default-features = true }
