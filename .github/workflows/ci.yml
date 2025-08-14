@@ -1,0 +1,21 @@
+name: CI
+on:
+  push:
+    branches: [ dev ]
+  pull_request:
+    branches: [ dev ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+      - name: Build workspace
+        run: cargo build --workspace --locked
+      - name: CLI dry-run publish smoke test
+        run: |
+          echo 'assets { mesh "cube" { builtin = "cube" } }' > /tmp/example.hcl
+          cargo run -p vysma -- module publish --dry-run --owner alice --name testmod --version 0.0.1 --hcl /tmp/example.hcl --assets assets/mesh/heroes || true 

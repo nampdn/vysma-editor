@@ -1,25 +1,34 @@
 #!/usr/bin/env bash
 
-RELEASE_MODE=${1}
+set -euo pipefail
+
+RELEASE_MODE=${1:-}
+CRATE_NAME=${CRATE:-bevy-in-app}
+TARGET_TRIPLE=aarch64-linux-android
 LIB_FOLDER="debug"
 
-# build to Android target
-if [ "${RELEASE_MODE}" = "--release" ]; then
-    LIB_FOLDER="release"
-    cargo so b --lib --target aarch64-linux-android ${RELEASE_MODE}
+if [[ "${RELEASE_MODE:-}" == "--release" ]]; then
+  LIB_FOLDER="release"
+fi
+
+# Build .so for Android (requires cargo-subcommand for NDK or cross)
+# If you use `cargo so`, keep it; otherwise replace with your preferred toolchain.
+if command -v cargo-so >/dev/null 2>&1; then
+  if [[ "${RELEASE_MODE:-}" == "--release" ]]; then
+    cargo so b -p "${CRATE_NAME}" --lib --target "${TARGET_TRIPLE}" ${RELEASE_MODE}
+  else
+    RUST_BACKTRACE=full RUST_LOG=wgpu_hal=debug cargo so b -p "${CRATE_NAME}" --lib --target "${TARGET_TRIPLE}"
+  fi
 else
-    RUST_BACKTRACE=full RUST_LOG=wgpu_hal=debug cargo so b --lib --target aarch64-linux-android
+  cargo build -p "${CRATE_NAME}" --target "${TARGET_TRIPLE}" ${RELEASE_MODE}
 fi
 
-# copy .so files to jniLibs folder
+# Copy .so files to jniLibs folder
 ARM64="android/app/libs/arm64-v8a"
-ARMv7a="android/app/libs/armeabi-v7a"
+mkdir -p "${ARM64}"
 
-if [ ! -d "$ARM64" ]; then
-    mkdir "$ARM64"
-fi
-if [ ! -d "$ARMv7a" ]; then
-    mkdir "$ARMv7a"
-fi
+CRATE_LIB_BASENAME="lib$(echo "${CRATE_NAME}" | tr '-' '_')"
+OUT_SO="target/${TARGET_TRIPLE}/${LIB_FOLDER}/${CRATE_LIB_BASENAME}.so"
+cp "${OUT_SO}" "${ARM64}/${CRATE_LIB_BASENAME}.so"
 
-cp target/aarch64-linux-android/${LIB_FOLDER}/libbevy_in_app.so "${ARM64}/libbevy_in_app.so"
+echo "Copied ${OUT_SO} -> ${ARM64}/${CRATE_LIB_BASENAME}.so"

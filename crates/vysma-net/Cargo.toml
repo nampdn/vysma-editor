@@ -1,0 +1,25 @@
+[package]
+name = "vysma-net"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "vysma_net"
+crate-type = ["rlib"]
+
+[features]
+client = ["lightyear/client"]
+server = ["lightyear/server", "lightyear/udp"]
+
+[dependencies]
+bevy = { version = "0.16", default-features = true }
+lightyear = { version = "0.22.5", features = [
+    "input_native",
+    "interpolation",
+    "prediction",
+    "replication",
+    "netcode",
+] }
+serde = { version = "1", features = ["derive"] }
+tracing = "0.1"
+async-compat = "0.2.3" 

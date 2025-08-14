@@ -1,0 +1,4 @@
+[alias]
+sv = "run -- server"
+cl = "run -- client -c 1"
+vp = "run -p vysma --" 

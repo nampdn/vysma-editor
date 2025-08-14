@@ -355,16 +355,34 @@ fn main() -> anyhow::Result<()> {
 		Commands::Client { client_id, gui } => { run_client(client_id, gui) }
 		Commands::Module { cmd } => match cmd {
 			ModuleCmd::Publish { owner, name, version, hcl, assets, visibility, desc, set_latest, dry_run, parallel, retries } => {
+				let hcl_content = read_hcl(&hcl)?;
+				let digest = sha256_hex(&hcl_content);
+				// If dry-run: compute manifest (if assets provided) and print summary; skip all network/env
+				if dry_run {
+					let mut manifest: Vec<ManifestRow> = Vec::new();
+					if let Some(dir) = assets.as_ref() {
+						if dir.exists() {
+							// Build manifest locally without uploads
+							let rows = upload_assets_and_manifest(&Client::builder().build()?, "", &AppwriteCfg {
+								endpoint: String::new(), project: String::new(), key: String::new(), database: String::new(), modules_col: String::new(), versions_col: String::new(), assets_bucket_id: String::new(), assets_index_col: None
+							}, &owner, &name, &version, "", dir, parallel, 0, true)?;
+							manifest = rows;
+						}
+					}
+					println!("[dry-run] Module {}::{} v{} (sha={})", owner, name, version, digest);
+					println!("Import with: modules = [{{ name = \"{}::{}\", alias = \"{}\", version = \"{}\" }}]", owner, name, name, version);
+					if !manifest.is_empty() { println!("Manifest ({} entries):", manifest.len()); for r in manifest { println!("  {} -> {} ({} bytes)", r.original_path, r.url_path, r.size); } }
+					return Ok(());
+				}
+
+				// Normal publish path
 				let cfg = cfg_from_env()?;
 				let http = Client::builder().build()?;
 				let api = base_api(&cfg.endpoint);
-
-				let hcl_content = read_hcl(&hcl)?;
-				let digest = sha256_hex(&hcl_content);
 				let module_id = create_or_update_module(&http, &api, &cfg, &owner, &name, &version, &visibility, &desc)?;
 
 				let mut manifest: Option<Vec<ManifestRow>> = None;
-				if let Some(dir) = assets.as_ref() { if dir.exists() { let rows = upload_assets_and_manifest(&http, &api, &cfg, &owner, &name, &version, &format!("{}__{}", module_id, version), dir, parallel, retries, dry_run)?; manifest = Some(rows); } }
+				if let Some(dir) = assets.as_ref() { if dir.exists() { let rows = upload_assets_and_manifest(&http, &api, &cfg, &owner, &name, &version, &format!("{}__{}", module_id, version), dir, parallel, retries, false)?; manifest = Some(rows); } }
 
 				let _version_doc_id = create_version(&http, &api, &cfg, &module_id, &version, &digest, &hcl_content, manifest.clone())?;
 				if set_latest { let _ = update_latest_version(&http, &api, &cfg, &module_id, &version); }

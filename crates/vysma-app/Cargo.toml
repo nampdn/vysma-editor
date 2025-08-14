@@ -1,0 +1,25 @@
+[package]
+name = "vysma-app"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "vysma_app"
+crate-type = ["rlib"]
+
+[features]
+client = ["lightyear/client"]
+server = ["lightyear/server", "lightyear/udp"]
+gui = ["bevy/bevy_winit", "bevy/bevy_window", "bevy/bevy_ui"]
+
+[dependencies]
+bevy = { version = "0.16", default-features = true }
+lightyear = { version = "0.22.5", features = ["netcode", "replication", "prediction", "interpolation", "input_native"] }
+vysma-net = { path = "../vysma-net" }
+vysma-platform = { path = "../vysma-platform" }
+vysma-hcl = { path = "../vysma-hcl" }
+clap = { version = "4.5.4", features = ["derive"] }
+rand = "0.9.2"
+cfg-if = "1.0"
+bevy-inspector-egui = { version = "0.32", default-features = false, features = ["bevy_pbr", "bevy_image", "bevy_render", "egui_open_url"] }
+serde = { version = "1", features = ["derive"] } 

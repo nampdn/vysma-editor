@@ -3,6 +3,9 @@ members = [
     "crates/vysma-hcl",
     "crates/vysma-cloud",
     "crates/vysma",
+    "crates/vysma-net",
+    "crates/vysma-platform",
+    "crates/vysma-app",
 ]
 resolver = "2"
 
@@ -118,6 +121,9 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 # New internal crates
 vysma-hcl = { path = "crates/vysma-hcl" }
 vysma-cloud = { path = "crates/vysma-cloud" }
+vysma-net = { path = "crates/vysma-net" }
+vysma-platform = { path = "crates/vysma-platform" }
+vysma-app = { path = "crates/vysma-app", features = ["client", "server", "gui"] }
 
 [target.'cfg(target_os = "ios")'.dependencies]
 core-graphics = "*"
