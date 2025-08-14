@@ -41,6 +41,9 @@ pub mod hcl {
             app.init_resource::<runtime::HclRuntime>();
             app.init_resource::<EditorState>();
             app.insert_resource(HclOverlayLogTimer(Timer::from_seconds(1.0, TimerMode::Repeating)));
+            // New: manifest and base URL resources
+            app.init_resource::<remote::ManifestMap>();
+            app.init_resource::<remote::AssetBaseUrl>();
             app.add_event::<spawn::RespawnRequest>();
             app.add_systems(PreUpdate, spawn::hot_reload);
             app.add_systems(Update, (spawn::spawn_ready, runtime::process_triggers, spawn::apply_persisted_state));

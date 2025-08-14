@@ -38,6 +38,24 @@ pub struct AppwriteClient {
     sdk: unofficial_appwrite::client::Client,
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct ManifestEntry {
+    pub original_path: String,
+    pub sha256: String,
+    #[serde(default)]
+    pub size: i64,
+    #[serde(default)]
+    pub content_type: Option<String>,
+    pub url_path: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct ModuleVersionData {
+    pub version: String,
+    pub hcl: String,
+    pub manifest: Option<Vec<ManifestEntry>>,
+}
+
 impl AppwriteClient {
     pub fn new(cfg: AppwriteConfig) -> Self {
         let endpoint = normalize_endpoint(&cfg.endpoint);
@@ -76,7 +94,7 @@ impl AppwriteClient {
         Ok(id)
     }
 
-    pub fn get_latest_version(&self, module_id: &str) -> anyhow::Result<(String, String)> {
+    pub fn get_latest_version(&self, module_id: &str) -> anyhow::Result<ModuleVersionData> {
         let client = self.sdk.clone();
         let db = self.cfg.database_id.clone();
         let col = self.cfg.module_versions_collection_id.clone();
@@ -95,13 +113,14 @@ impl AppwriteClient {
             let doc = list.documents.into_iter().next().ok_or_else(|| unofficial_appwrite::error::Error::Custom("no versions for module".into()))?;
             let version = doc.data.get("version").and_then(|v| v.as_str()).unwrap_or("").to_string();
             let hcl = doc.data.get("hcl").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            Ok::<(String, String), unofficial_appwrite::error::Error>((version, hcl))
+            let manifest: Option<Vec<ManifestEntry>> = doc.data.get("manifest").and_then(|v| serde_json::from_value(v.clone()).ok());
+            Ok::<ModuleVersionData, unofficial_appwrite::error::Error>(ModuleVersionData { version, hcl, manifest })
         };
         let out = self.rt.block_on(fut)?;
         Ok(out)
     }
 
-    pub fn get_specific_version(&self, module_id: &str, version: &str) -> anyhow::Result<String> {
+    pub fn get_specific_version(&self, module_id: &str, version: &str) -> anyhow::Result<ModuleVersionData> {
         let client = self.sdk.clone();
         let db = self.cfg.database_id.clone();
         let col = self.cfg.module_versions_collection_id.clone();
@@ -119,11 +138,13 @@ impl AppwriteClient {
             args.insert("queries".into(), Value::Array(queries.into_iter().map(Value::String).collect()));
             let list = Databases::list_documents(&client, &db, &col, args).await?;
             let doc = list.documents.into_iter().next().ok_or_else(|| unofficial_appwrite::error::Error::Custom("version not found".into()))?;
+            let version = doc.data.get("version").and_then(|v| v.as_str()).unwrap_or("").to_string();
             let hcl = doc.data.get("hcl").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            Ok::<String, unofficial_appwrite::error::Error>(hcl)
+            let manifest: Option<Vec<ManifestEntry>> = doc.data.get("manifest").and_then(|v| serde_json::from_value(v.clone()).ok());
+            Ok::<ModuleVersionData, unofficial_appwrite::error::Error>(ModuleVersionData { version, hcl, manifest })
         };
-        let hcl = self.rt.block_on(fut)?;
-        Ok(hcl)
+        let out = self.rt.block_on(fut)?;
+        Ok(out)
     }
 }
 
@@ -137,14 +158,21 @@ impl AppwriteRemoteProvider {
 }
 
 impl vysma_hcl::hcl::remote::RemoteModuleProvider for AppwriteRemoteProvider {
-    fn get_module_hcl(&self, username: &str, name: &str, version: Option<&str>) -> anyhow::Result<String> {
+    fn get_module(&self, username: &str, name: &str, version: Option<&str>) -> anyhow::Result<vysma_hcl::hcl::remote::RemoteModule> {
         let module_id = self.client.get_module_id(username, name)?;
-        if let Some(v) = version { self.client.get_specific_version(&module_id, v) } else { let (_ver, hcl) = self.client.get_latest_version(&module_id)?; Ok(hcl) }
+        let mv = if let Some(v) = version { self.client.get_specific_version(&module_id, v)? } else { self.client.get_latest_version(&module_id)? };
+        Ok(vysma_hcl::hcl::remote::RemoteModule { hcl: mv.hcl, manifest: mv.manifest.map(|m| m.into_iter().map(|e| vysma_hcl::hcl::remote::ManifestEntry { original_path: e.original_path, sha256: e.sha256, size: e.size, content_type: e.content_type, url_path: e.url_path }).collect()) })
     }
 }
 
 pub fn install_appwrite_provider_if_env(app: &mut App) {
     if let Some(p) = AppwriteRemoteProvider::try_from_env() {
         app.insert_resource(vysma_hcl::hcl::remote::RemoteModuleProviderResource(Box::new(p)));
+    }
+    // Also configure remote asset base URL if provided
+    if let Ok(base) = std::env::var("VYSMA_ASSET_BASE_URL") {
+        if !base.is_empty() {
+            app.insert_resource(vysma_hcl::hcl::remote::AssetBaseUrl(base));
+        }
     }
 } 

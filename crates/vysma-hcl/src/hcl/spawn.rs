@@ -9,7 +9,7 @@ use bevy::prelude::*;
 #[cfg(feature = "remote_assets")]
 use reqwest::blocking as http;
 use super::types::{HclPersistent, HclTags};
-use super::remote::merge_remote_modules;
+use super::remote::{merge_remote_modules, ManifestMap, AssetBaseUrl};
 
 #[derive(Resource, Default)]
 pub struct SceneSpawner {
@@ -31,6 +31,8 @@ pub fn spawn_ready(
     mut materials: ResMut<Assets<StandardMaterial>>,
     loader: Res<ModuleLoader>,
     provider: Option<Res<crate::hcl::remote::RemoteModuleProviderResource>>,
+    mut manifest_map: ResMut<ManifestMap>,
+    base_url: Option<Res<AssetBaseUrl>>,
 ) {
     if let Some(entry) = entry {
         if let Some(h) = &entry.0 {
@@ -47,7 +49,7 @@ pub fn spawn_ready(
             if let Some(asset) = assets.get(h) {
                 let Some(mut doc) = merge_includes(&asset.doc, &asset_server, &assets) else { return; };
                 if let Some(provider) = provider.as_deref() {
-                    let _ = merge_remote_modules(&mut doc, &loader, Some(provider));
+                    let _ = merge_remote_modules(&mut doc, &loader, Some(provider), &mut manifest_map, base_url.as_deref());
                 }
                 let root = spawn_from_doc(
                     &mut commands,
@@ -57,6 +59,7 @@ pub fn spawn_ready(
                     &mut meshes,
                     &mut materials,
                     &doc,
+                    &manifest_map,
                 );
                 spawner.spawned_roots.insert(h.clone(), root);
             }
@@ -89,6 +92,8 @@ pub fn hot_reload(
     q_persist: Query<(&HclPersistent, Option<&Transform>)>,
     loader: Res<ModuleLoader>,
     provider: Option<Res<crate::hcl::remote::RemoteModuleProviderResource>>,
+    mut manifest_map: ResMut<ManifestMap>,
+    base_url: Option<Res<AssetBaseUrl>>,
 ) {
     for ev in events.read() {
         if let bevy::asset::AssetEvent::Modified { id } = *ev {
@@ -102,7 +107,7 @@ pub fn hot_reload(
                 if let Some(asset) = assets.get(&handle) {
                     let Some(mut doc) = merge_includes(&asset.doc, &asset_server, &assets) else { continue; };
                     if let Some(provider) = provider.as_deref() {
-                        let _ = merge_remote_modules(&mut doc, &loader, Some(provider));
+                        let _ = merge_remote_modules(&mut doc, &loader, Some(provider), &mut manifest_map, base_url.as_deref());
                     }
                     let new_root = spawn_from_doc(
                         &mut commands,
@@ -112,6 +117,7 @@ pub fn hot_reload(
                         &mut meshes,
                         &mut materials,
                         &doc,
+                        &manifest_map,
                     );
                     spawner.spawned_roots.insert(handle.clone(), new_root);
                 }
@@ -128,13 +134,14 @@ fn spawn_from_doc(
     meshes: &mut ResMut<Assets<Mesh>>,
     materials: &mut ResMut<Assets<StandardMaterial>>,
     doc: &SceneDoc,
+    manifest_map: &ManifestMap,
 ) -> Entity {
     ctx.meshes.clear();
     ctx.materials.clear();
     ctx.images.clear();
     ctx.scenes.clear();
 
-    if let Some(assets) = &doc.assets { load_assets(assets, ctx, asset_server, meshes, materials); }
+    if let Some(assets) = &doc.assets { load_assets(assets, ctx, asset_server, meshes, materials, manifest_map); }
 
     // Build prefab map for includes
     let mut prefabs: HashMap<String, serde_json::Value> = HashMap::default();
@@ -163,6 +170,7 @@ fn load_assets(
     asset_server: &AssetServer,
     meshes: &mut Assets<Mesh>,
     materials: &mut Assets<StandardMaterial>,
+    manifest_map: &ManifestMap,
 ) {
     for m in &assets.mesh {
         let builtin = match &m.kind { MeshKind::Builtin { builtin } => builtin.as_str(), };
@@ -186,7 +194,9 @@ fn load_assets(
 
     // Load GLTF scenes into ctx.scenes
     for g in &assets.gltf {
-        let key = if let Some(node) = &g.node { format!("{}#{}", g.file, node) } else { format!("{}#Scene0", g.file) };
+        let mut path = g.file.clone();
+        if let Some(mapped) = manifest_map.0.get(&g.file) { path = mapped.clone(); }
+        let key = if let Some(node) = &g.node { format!("{}#{}", path, node) } else { format!("{}#Scene0", path) };
         let handle: Handle<bevy::scene::Scene> = asset_server.load(key);
         ctx.scenes.insert(g.name.clone(), handle);
     }
