@@ -33,13 +33,13 @@ Goal: allow developers to publish reusable HCL modules and import them by `usern
 
 ### Publishing workflow (CLI)
 - Command: `module publish`
-  - Args: `--owner <username> --name <module> --version <v> --hcl <file> [--assets <dir>] [--visibility public|private] [--desc <text>]`
+  - Args: `--owner <username> --name <module> --version <v> --hcl <file> [--assets <dir>] [--visibility public|private] [--desc <text>] [--license <spdx>] [--tags a,b]`
   - Steps:
     1) Read HCL; compute SHA256.
     2) Create module if missing (id = `owner__name`); set `latestVersion` if requested.
     3) Create module version with HCL and sha (id = `owner__name__version`).
     4) Upload assets under deterministic keys `owner/name/<sha256>.ext` to `module-assets` bucket (idempotent; 409 → skip).
-    5) Build a manifest array and persist into `ModuleVersions.manifest`.
+    5) Build a manifest array and persist into ModuleVersion.manifest.
     6) Optionally index assets in `ModuleAssetsIndex` for search.
     7) Update Modules.latestVersion when `--set-latest` is enabled (default true).
   - Output: IDs and URLs; print recommended import line and resolved assets summary.
@@ -52,13 +52,11 @@ Bootstrap and dev workflow:
 - `vysma client` → runs a local client connected to the dev server
 - `vysma publish` → publishes module or scene with deduped hashed assets and manifest
 
-Example:
-```
-cargo run -p vysma -- module publish \
-  --owner alice --name axe --version 0.1.0 \
-  --hcl assets/moba_hcl/heroes/axe.hcl \
-  --assets assets/mesh/heroes
-```
+### Remix and dependencies (Ecosystem)
+- Remix: a project can import a module and override or extend prefabs/entities via additional HCL includes.
+- Dependencies: Module metadata may declare `depends = [{ name, version? }]`; server resolves transitively (acyclic recommended initially).
+- Licensing: Module metadata should include `license` (SPDX) and `origin` info; CLI surfaces in output.
+- Semver guidance: No hard solver in MVP; future: allow `^0.2` style with best‑match resolve and cache.
 
 ### Server integration (runtime)
 - During spawn/hot‑reload:
@@ -70,6 +68,7 @@ cargo run -p vysma -- module publish \
 ### Security and visibility
 - Only public modules are resolved by default.
 - Private modules require project membership (future enhancement).
+- Signed URLs (optional) for private asset fetch; `HttpAssetIo` to attach headers when configured.
 
 ### Checklist
 - [x] Resolve `username::module` imports via Appwrite
@@ -79,6 +78,7 @@ cargo run -p vysma -- module publish \
 - [x] CLI: publish version (assets upload + manifest)
 - [ ] CLI: new/serve/client bootstrap commands
 - [ ] Docs: authoring guidance and examples
+- [ ] Remix/dependency metadata, license surfaced in CLI and docs
 
 ### Authoring example
 ```hcl

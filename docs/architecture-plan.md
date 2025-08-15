@@ -7,6 +7,7 @@ Links:
 - See `docs/appwrite-integration.md` for persistence, identity, and API flows.
 - See `docs/http-asset-io.md` for remote asset loading via HTTP.
 - See `docs/editor-ui.md` for desktop editor UI/UX.
+- See `docs/relay-discovery.md` for LAN discovery and Internet relay (Expo‑style URLs).
 
 ---
 
@@ -16,6 +17,11 @@ Links:
 - **Edit/Preview** modes: Pause gameplay in Edit; run in Preview.
 - **Community modules**: Import by `username::module_name[@version]` with namespacing.
 - **DX/UX**: Clean, readable code; fast build‑verify cadence; minimal abstraction; high performance.
+- **Expo‑style workflow**: A multi‑platform "Vysma Client" app connects to a project URL (LAN or Internet) and mirrors the latest server HCL instantly.
+- **WASM browser preview**: One‑click open in browser; same HCL via WebSocket transport; HTTP Asset IO enabled with CORS.
+- **Dev ↔ SaaS alignment**: CLI can auth with Appwrite Dev account, operate locally, and also target the SaaS server seamlessly.
+
+---
 
 ### Out of scope (until V1)
 - Multi‑tenant billing, complex ACL, and full SaaS ops (kept simple for MVP).
@@ -24,7 +30,6 @@ Links:
 ---
 
 ### Feature Matrix
-
 - **Workspace split; crates for HCL and Cloud** — [x] Done (crates: `vysma-hcl`, `vysma-cloud`)
 - **HCL core (loader/runtime/spawn/hot‑reload/timers/actions/includes)** — [x] Done
 - **Editor/Preview mode resource + toggle (F5 + GUI button)** — [x] Done
@@ -42,6 +47,10 @@ Links:
 - **Editor auth (JWT) to gate updates** — [ ] Planned (MVP)
 - **Rollback to previous version** — [ ] Planned (Post‑MVP)
 - **Flattened single‑doc publish (includes/modules)** — [ ] Planned (Post‑MVP)
+- **WASM browser preview (WebSocket transport + CORS)** — [ ] Planned (MVP)
+- **Relay/discovery for LAN + Internet (rendezvous + NAT traversal/tunnel)** — [ ] Planned (MVP)
+- **Expo‑style multi‑platform client UX** — [ ] Planned (MVP)
+- **Remix & plugin metadata (license, deps, semver)** — [ ] Planned (MVP+)
 
 Legend: [x] implemented in code; [ ] not yet.
 
@@ -57,6 +66,46 @@ Legend: [x] implemented in code; [ ] not yet.
   - Sends `HclUpdateRequest` (with JWT) to server; live preview on all clients.
 - **Viewer Clients (Mobile/Desktop/Web)**: Bevy clients; always Preview; no editing.
 - **Appwrite**: Identity + DB + Storage for projects/scenes/modules/assets.
+- **Relay/Discovery**: Rendezvous service for project URLs, optional NAT traversal or HTTPS/WebSocket tunnel for remote access.
+
+---
+
+### Networking and Discovery (LAN + Internet)
+- **Discovery**
+  - LAN: mDNS broadcast `vysma.local` with project ID and port.
+  - Internet: short project URL `vysma.dev/<project-code>` resolving to relay.
+- **Transport**
+  - Native: QUIC for LAN; WebSocket fallback for firewall traversal.
+  - WASM: WebSocket only.
+- **Relay**
+  - Minimal WebSocket relay service that forwards Lightyear frames between server and clients.
+  - Token‑gated: server registers `project_code`, clients connect with a short‑lived token from CLI or server.
+- **Security**
+  - Editor updates require JWT verified by server against Appwrite JWKS.
+  - Viewer clients read‑only; receive `HclSceneBlob` updates.
+
+---
+
+### WASM Browser Preview
+- Build target: `wasm32-unknown-unknown` (Bevy).
+- Network: WebSocket transport to local server or relay.
+- Assets: `http_assets` feature enabled; CORS allowed from `localhost` and SaaS origins; see `docs/http-asset-io.md`.
+- Hosting: simple static page served by CLI (`vysma preview --open`).
+
+---
+
+### DX User Journeys (CLI‑first)
+- **Login**
+  - `vysma login --endpoint <url> --project <id>` → device/session token stored under `~/.vysma/config.toml`.
+- **Develop locally, share on LAN/Internet**
+  - `vysma serve` starts local server with hot‑reload; announces via mDNS and optionally registers with relay to get a URL.
+  - `vysma client --connect <url|lan>` launches a viewer client (desktop/mobile/wasm) subscribing to updates.
+- **Publish module**
+  - `vysma module publish --owner <u> --name <n> --version <v> --hcl <file> --assets <dir> [--set-latest]` uploads HCL + assets manifest to Appwrite.
+- **Persist scene (MVP+)**
+  - On Apply, server persists SceneVersion and marks as published; on restart, it auto‑loads the latest.
+- **Provision DB (Planned)**
+  - `vysma db provision` reads HCL `models { ... }` and creates/validates Appwrite collections and indexes.
 
 ---
 
@@ -67,7 +116,7 @@ Current status: Phase 1 completed (remote module resolve wired). Phase 2: CLI im
 Phase 2.1: CLI DX foundation (MVP)
 - Add `vysma new <name>`: scaffold a game repo with example HCL and `assets/` layout.
 - Add `vysma serve`: run the server app with hot‑reload and log overlay; watch `assets/`.
-- Add `vysma client`: run a local client connected to `serve`.
+- Add `vysma client`: run a local client connected to the dev server.
 - Acceptance:
   - Single command creates and runs a project locally; editing HCL hot‑reloads.
 
@@ -93,6 +142,11 @@ Phase 5: HTTP Asset IO (MVP+)
 - Add in‑memory cache; later, add disk cache under `~/.vysma/cache/`.
 - Acceptance: Assets load over HTTP across native/wasm.
 
+Phase 6: Relay/Discovery + Expo‑style Client (MVP)
+- Add mDNS discovery; implement minimal WebSocket relay; define project URL codes.
+- Package a "Vysma Client" app for mobile/desktop/web that connects via URL and hot‑reloads.
+- Acceptance: Multiple devices connect over LAN/Internet and see changes in realtime.
+
 ---
 
 ### Detailed implementation tasks (DX‑centric)
@@ -102,11 +156,13 @@ CLI (`vysma`)
   - Create directories: `assets/scenes`, `assets/mesh`, `assets/textures`.
   - Add example `scenes/moba_game.hcl` and README.
   - Optionally init git and write `.gitignore` (target/, .DS_Store).
+- login:
+  - Device/session auth flow with Appwrite; persist token locally; support `--endpoint` and `--project-id`.
 - serve:
-  - Build and run server binary with watch (`cargo watch` optional) and hot‑reload enabled.
+  - Build and run server binary with watch; optionally register with relay and print project URL.
   - Print URLs and keybindings; surface parse errors live.
 - client:
-  - Run client with connection to local server; pass flags for renderer/GUI.
+  - Run client with connection to local server or relay URL; pass flags for renderer/GUI.
 - publish:
   - Validate env, read HCL, compute sha.
   - Upload deduped assets (parallel), build manifest, create module/version.
@@ -115,11 +171,12 @@ CLI (`vysma`)
 Runtime
 - Keep manifest alongside imported module; inject into `ApplyCtx` for asset resolution.
 - Fallback: if manifest missing, use `file` directly.
+- WebSocket transport support for wasm; QUIC/WS for native.
 
 Docs
 - Update HCL spec to emphasize name‑based references and relative paths.
 - Add quickstart using `vysma new` + `vysma serve` + editing HCL.
-- Document `http_assets` feature flag usage.
+- Document `http_assets` and `wasm` feature usage, relay URL, and CORS.
 
 ---
 
@@ -130,6 +187,8 @@ Docs
 - Auth: Invalid JWT or unauthorized user → server logs and ignores; no state changes.
 - Persistence: Latest HCL survives server restart.
 - HTTP Asset IO: `asset_server.load("https://.../file.glb#Scene0")` works; images load into materials.
+- WASM Preview: `vysma preview --open` loads the scene via WebSocket and renders in browser.
+- Relay/Discovery: Multiple devices connect via LAN URL or short project URL and receive updates.
 
 ---
 
@@ -138,9 +197,11 @@ Server:
 - `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY`
 - `VYSMA_REGISTRY_ENABLED=true` (toggle remote module resolve)
 - `VYSMA_PROJECT_ID`, `VYSMA_SCENE_ID` (for persistence)
+- `VYSMA_RELAY_URL` (optional; enable remote access)
 
-Client (Editor):
+Client (Editor/Viewer):
 - `APPWRITE_PUBLIC_ENDPOINT` (for login flows if used)
+- `VYSMA_CONNECT` (ws(s):// host or relay short URL)
 
 ---
 
@@ -148,10 +209,110 @@ Client (Editor):
 - Remote asset latency → HTTP Asset IO caching/CDN.
 - Auth complexity → start with server‑side API key and JWT verification; expand later.
 - Module conflicts → require aliasing and enforce namespace prefix.
+- NAT traversal → relay fallback over HTTPS/WebSocket; QUIC when available.
 
 ---
 
 ### Testing Strategy
 - Unit: parse HCL strings with `parse_hcl_to_asset`; invalid HCL returns error.
 - Integration: import module over Appwrite on a clean client; assert prefabs/entities present.
-- E2E: editor → server update applies and clients respawn. 
+- E2E: editor → server update applies and clients respawn.
+- WASM: headless CI runs wasm bindgen build, starts a test WebSocket server, and verifies first frame renders.
+
+---
+
+### Engine Execution Plan (ECS/DX/Perf)
+
+Phased tasks to align the engine with ECS best practices, high DX, and performance. Each phase must build green and include minimal tests.
+
+P1: Compile-time and runtime performance
+- Precompile expressions: parse at HCL load into ASTs; evaluate only on event fire.
+- Selector indices: maintain `Name→Entity` and `Tag→Vec<Entity>` resources; avoid world scans.
+- Deterministic RNG resource with seeding; add builtins (`rng()`, `rng_range(a,b)`).
+- Typed component appliers: avoid walking `serde_json::Value` in hot loops; decode to typed payloads once.
+
+P2: State scopes (global/tag/entity)
+- Implement `VarScopes` resource and optional `HclVars` component for entity-local state.
+- Extend var actions with `scope` and selector‑based targeting; back‑compat for global.
+- Document `var(scope,name)` for expressions and add examples.
+- Implement change‑driven binding engine: in/out/inout bindings, on=change, epsilon, throttle, priority, conflict resolution history.
+
+P3: Networking annotations and authority
+- Trigger metadata: `authority="server|client"`, `channel="reliable|unreliable"` (docs first, then code).
+- Server‑authoritative world changes; client‑only UI triggers; echo suppression where needed.
+- Snapshot + diff model for `HclSceneBlob` updates; sha‑versioned.
+
+P4: Trigger systemization and diagnostics
+- Register static triggers (startup, tick, timers) as Bevy systems with `run_if` guards.
+- Event dispatcher for key/custom events; minimal allocations.
+- Editor panels: trigger list with last‑fired timestamps and guard status; line/column diagnostics for parse/compile errors.
+
+P5: Assets, WASM, and caching
+- Asset preload hints (`preload`, `priority`) and LOD guidance.
+- WASM Service Worker cache for manifest assets; CORS guidance baked into docs.
+- HTTP Asset IO disk cache (optional, behind feature).
+
+P6: Persistence & Backend Compute
+- HCL `models {}` and `persist_bind` parsing; expose as resources.
+- Server systems to implement `persist_load/save/set/query` actions via Appwrite.
+- CLI `vysma db provision`; add readme guidance in projects.
+- Auth: enforce server-only execution for persist actions.
+- Examples: load on startup, save on checkpoint, leaderboard query → UI vars.
+
+Acceptance per phase
+- Bench: reduced per‑frame allocations and world scans; event‑only evaluation of expressions.
+- Correctness: same authored HCL produces identical results pre/post changes.
+- UX: clearer errors, visible trigger status, smoother multi‑device preview.
+- Persistence: numeric fields round-trip; queries populate vars correctly on server authority. 
+
+### MMO Support Addendum
+
+Targeted engine/platform capabilities for large online worlds. These complement existing plans and are feature-gated; each item can be delivered incrementally.
+
+World topology
+- Shards: horizontal copies of a world for population control.
+- Zones: spatial partitions (grid/quadtree) with handoffs; entity migration across zones.
+- Instances: ephemeral copies for dungeons/raids; lifecycle managed by matchmaking.
+
+Interest management (AOI)
+- Spatial index per zone (grid/quadtree); entity subscribes to AOI radius.
+- Relevancy tiers: critical (reliable, high rate), nearby (delta, medium), distant (LOD/heartbeat), out-of-range (pause updates).
+- Priority budget: per-tick bandwidth quotas by priority; drop/merge updates when over budget.
+
+Networking and tick
+- Server tick broadcast and client time sync; configurable tick rate per zone.
+- Snapshot + delta compression; per-entity baselines; bit-packing for common components.
+- Channels/QoS: reliable for state, unreliable for frequent positions; backpressure metrics.
+
+Persistence and data integrity
+- Event-sourced ledger for economy/inventory (append-only), with periodic snapshots.
+- Idempotency keys on write actions; server-side validation/sanity checks.
+- Transactions for multi-entity writes (atomic when supported) with fallback compensation.
+
+Social systems
+- Accounts/sessions, presence, friends, parties, guilds; text chat channels and whispers.
+- Matchmaking/lobbies → instances assignment; party stickiness across migrations.
+- Moderation: mute/kick/ban hooks and audit logs.
+
+Security and anti-cheat
+- Server authority on physics/combat; deterministic validation of client-reported inputs.
+- Rate limits per identity/IP; cooldowns on costly actions; anomaly detection hooks.
+- Signed action tokens with short TTL; region/gateway verification.
+
+Ops and observability
+- Metrics (tick time, send/recv bytes, queue depths), tracing, structured logs.
+- Live ops: feature flags, announcements, safe maintenance modes, targeted drain/migrate.
+- Replay logs for root-cause and arbitration; privacy redaction pipeline.
+
+Scalability
+- Stateless gateways (protocol termination) + zone servers behind a coordinator.
+- Redis/pubsub (or NATS/Kafka) for cross-zone events (chat, matchmaking, presence).
+- Container orchestration (Kubernetes) for auto-scaling instances/zones.
+
+HCL hooks (see hcl-spec)
+- New events: presence.join/leave, chat.message, party.match_found, instance.created, guild.invite.
+- New actions: send_chat, match_queue, instance_create/transfer, teleport, guild_invite/accept.
+- Conditions: in_aoi, population_lt, has_permission.
+
+Acceptance
+- Zone handoff tests; AOI correctness under load; stable tick; bounded bandwidth; persistence round-trips; basic social flows. 

@@ -25,6 +25,23 @@ Notes
 
 ---
 
+### Auth flows (Dev and SaaS)
+
+CLI (`vysma login`)
+- Supports device/session auth against `APPWRITE_ENDPOINT` and `APPWRITE_PROJECT_ID`.
+- Stores token under `~/.vysma/config.toml` with `current_profile` and named profiles.
+- Tokens are used to request a short‑lived JWT for editor updates and to tag `authorUserId` on SceneVersions.
+
+Editor → Server update
+- Editor includes `Authorization: Bearer <jwt>` on `HclUpdateRequest`.
+- Server verifies via Appwrite JWKS (no server key required for verify) and checks project membership.
+
+Dev vs SaaS
+- Dev: point CLI and server at your Dev Appwrite project.
+- SaaS: same flow, different profile/endpoint; no code change.
+
+---
+
 ### API wrapper (`cloud::appwrite_client`)
 - Config: `AppwriteConfig { endpoint, project_id, api_key }` (endpoint normalized to include `/v1`)
 - Client: initializes SDK objects (Databases); uses query helpers (equal/orderDesc/limit)
@@ -70,7 +87,9 @@ All functions return `anyhow::Result<T>`.
    - Create `ModuleAssetsIndex` row with { moduleVersionId, path = url_path, storageFileId = file_id, sha256, size, original_path, content_type? } (optional).
 2) Create `ModuleVersions` doc with embedded `manifest` array for this version.
 
-Headers
+---
+
+### Headers
 - Requests include: `X-Appwrite-Project`, `X-Appwrite-Key`, `X-Appwrite-Response-Format: 1.7.0`
 
 ---
@@ -79,6 +98,7 @@ Headers
 - Server uses API key; never shipped to clients.
 - Editor JWT (optional in MVP) is verified on server via Appwrite Accounts/JWKS.
 - Public modules resolved without auth; private modules require project membership (future).
+- Profiles: support multiple endpoints/projects; prevent token cross‑contamination by scoping per profile.
 
 ---
 
@@ -87,6 +107,8 @@ Headers
 - [x] Env/config resource and initialization
 - [x] Wire resolve into module loader/spawn
 - [x] CLI: publish module (create module/version + manifest; hashed assets upload)
+- [ ] (MVP) CLI login with profile management and token storage
+- [ ] (MVP) Editor JWT attached to update requests; server verify
 - [ ] (MVP+) Persist scene on update; load on startup
 - [ ] (MVP+) Private module auth path
 
@@ -94,4 +116,31 @@ Headers
 
 ### Env/CLI
 - Server env: `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY`, `VYSMA_PROJECT_ID`, `VYSMA_SCENE_ID`
-- CLI flags mirror env for local publishing. 
+- CLI: `vysma login --endpoint <url> --project <id>` creates/uses profile; stored in `~/.vysma/config.toml`
+- Client (Editor) picks profile via `--profile dev|prod` or env `VYSMA_PROFILE`. 
+
+### Persistence (models/bindings → Appwrite)
+
+HCL models and bindings map to Appwrite collections and documents. All persist actions execute on the server.
+
+Models
+- `models { model "Player" { key = "id", fields = { hp=0.0, xp=0.0 } } }`
+- Provisioning (planned): CLI `vysma db provision` creates collections (or validates) based on HCL models; field types are best‑effort.
+
+Bindings
+- `persist_bind "PlayerState" { model = "Player", id = "${player_id}", scope = "entity", targets = { name = "Player" }, map = { hp = "hp", xp = "xp" } }`
+- `persist_load` reads document by id and writes numeric fields into the mapped vars in the given scope.
+- `persist_save` reads mapped vars and upserts the document.
+
+Queries
+- `persist_query` performs filtered reads with order/limit; numbers are stored into namespaced globals (`prefix_index_field`). Strings are available to UI binding only.
+
+Security and execution
+- Persist actions ignore client authority; they execute only on the server with API key.
+- Triggers using persist actions should set `authority = "server"` for clarity.
+- Appwrite permissions should scope documents to project and (optionally) user.
+
+Open items
+- Schema drift detection and migration hints.
+- String/UI bindings for text fields in a future UI module.
+- Rate limits/backoff on hot paths. 
