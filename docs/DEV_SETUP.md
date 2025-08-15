@@ -1,49 +1,26 @@
-### Developer Setup and Fast Iteration Guide
+### Developer Setup
 
-This repo includes a CLI (`vysma`) and Bevy app (`bevy-in-app`) for server/client.
-Use these steps to get a fast loop for iterating on features and testing end-to-end.
+- Install Rust stable and just (optional):
+  - rustup default stable
+  - brew install just
 
-#### Prereqs
-- Rust toolchain (latest stable)
-- just (optional but recommended): `brew install just` (macOS)
-- Appwrite project (optional for publish): endpoint + API key + database/collections
+- Common commands:
+  - `just build` — build current crate
+  - `just build-all` — build entire workspace
+  - `just serve` — run desktop server
+  - `just client` — run desktop client
+  - `just host` — run host-client
+  - `just build-http` — build workspace with HTTP assets
+  - `just publish-dry module name version root` — dry-run manifest for a module
 
-#### Env
-Copy `.env.example` to `.env` and edit values, or export env vars in your shell.
+- Cargo aliases (via `.cargo/config.toml`):
+  - `cargo cl` — run client (GUI)
+  - `cargo sv` — run server
+  - `cargo hc` — run host-client
+  - `cargo cl-http` / `cargo sv-http` — with HTTP assets feature
 
-- Required to publish modules:
-  - `APPWRITE_ENDPOINT`, `APPWRITE_PROJECT_ID`, `APPWRITE_API_KEY`
-  - `APPWRITE_DATABASE_ID`, `APPWRITE_MODULES_COLLECTION_ID`, `APPWRITE_MODULEVERSIONS_COLLECTION_ID`
-- Optional:
-  - `APPWRITE_MODULE_ASSETS_BUCKET_ID` (defaults to `module-assets`)
-  - `APPWRITE_MODULE_ASSETS_INDEX_COLLECTION_ID`
-  - `VYSMA_ASSET_BASE_URL` (e.g., `https://storage.example.com`)
-
-#### Common Commands
-If you have `just`, run `just` to list commands. Otherwise, run the cargo equivalents.
-
-- Build (default): `just build` (or `cargo build --workspace`)
-- Build (all features): `just build-all`
-- Run server: `just serve` (or `cargo run -- server`)
-- Run client: `just client` (or `cargo run -- client -c 1`)
-- Bootstrap new project: `just new mygame` (creates `sandbox/mygame` with assets)
-- Ensure schema: `just ensure-schema`
-- Verify env: `just verify`
-- Publish module (example):
-  - `just publish alice axe 0.1.0 assets/moba_hcl/heroes/axe.hcl assets/mesh/heroes`
-- Dry-run publish (no network; compute manifest only):
-  - `just publish-dry alice axe 0.1.0 assets/moba_hcl/heroes/axe.hcl assets/mesh/heroes`
-
-#### Local Iteration Flow
-1) Start server in one terminal: `just serve`
-2) Start client in another: `just client`
-3) Edit HCL files under `assets/`.
-   - In Edit mode (F5), pressing F6 sends an example update, or use the editor flow to push `HclUpdateRequest`.
-4) To test module imports from Appwrite: set env, ensure schema, publish a module, and include it via `modules = [...]`.
-   - Set `VYSMA_ASSET_BASE_URL` so runtime resolves manifest `url_path` to a full URL.
-   - Enable HTTP asset IO when needed with `--features http_assets`.
-
-#### Tips
-- Use `vysma module publish --dry-run` to quickly see the manifest and sha.
-- When iterating on remote modules, restart server after publishing to pick up changes.
-- Keep default build green; optional features like Steam/visualizer are disabled by default. 
+- Typical flow:
+  1) `cargo run -p vysma -- new demo`
+  2) `just serve` (server) and `just client` (client)
+  3) Make changes; `just build-all`
+  4) `just publish-dry module demo 0.0.1 assets/moba_hcl` 

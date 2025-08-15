@@ -1,6 +1,6 @@
-use crate::protocol::*;
+use crate::protocol::{CursorPosition, PlayerColor, PlayerPosition};
 use bevy::prelude::*;
-use lightyear::prelude::Confirmed;
+use lightyear::prelude::*;
 
 #[derive(Clone)]
 pub struct RendererPlugin;

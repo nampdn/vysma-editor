@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 use lightyear::prelude::*;
 
-use crate::protocol::*;
+use crate::protocol::{ProtocolPlugin, Inputs, PlayerPosition};
 
 #[derive(Clone)]
 pub struct SharedPlugin;

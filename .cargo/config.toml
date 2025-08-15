@@ -1,4 +1,10 @@
 [alias]
-sv = "run -- server"
+# Desktop client with GUI
 cl = "run -- client -c 1"
-vp = "run -p vysma --" 
+# Desktop server
+sv = "run -- server"
+# Host-client (both)
+hc = "run -- host-client"
+# Enable HTTP asset IO
+cl-http = "run --features http_assets -- client -c 1"
+sv-http = "run --features http_assets -- server" 

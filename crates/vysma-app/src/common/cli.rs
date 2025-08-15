@@ -1,26 +1,18 @@
 use std::time::Duration;
 
 use bevy::diagnostic::DiagnosticsPlugin;
-use bevy::log::{Level, LogPlugin};
 use bevy::prelude::*;
 use bevy::state::app::StatesPlugin;
 use clap::{Parser, Subcommand};
 #[cfg(any(target_family = "wasm", target_os = "ios"))]
 use rand::random;
 
-#[cfg(feature = "client")]
-use vysma_net::client::{connect, ClientNetwork, ClientTransports};
 #[cfg(all(feature = "gui", feature = "client"))]
 use crate::common::renderer::ClientRendererPlugin;
-use crate::common::shared::{CLIENT_PORT, SERVER_ADDR, SERVER_PORT, SHARED_SETTINGS};
-#[cfg(feature = "gui")]
-use bevy::window::{PresentMode, Window, WindowPlugin};
-
-use lightyear::link::RecvLinkConditioner;
-use lightyear::prelude::LinkConditionerConfig;
 
 mod window;
 mod log;
+mod spawn;
 
 #[derive(Parser, Debug)]
 #[command(version, about)]
@@ -55,7 +47,7 @@ impl Cli {
                     ClientRendererPlugin::new(format!("Client {client_id:?}")),
                 ));
                 // set up networking entities
-                self.spawn_connections(&mut app);
+                spawn::spawn_connections(&mut app, &Mode::Client { client_id });
                 app
             }
             #[cfg(feature = "server")]
@@ -73,7 +65,7 @@ impl Cli {
                     lightyear::prelude::server::ServerPlugins { tick_duration },
                 ));
                 // set up networking entities
-                self.spawn_connections(&mut app);
+                spawn::spawn_connections(&mut app, &Mode::Server);
                 app
             }
             #[cfg(all(feature = "client", feature = "server"))]
@@ -86,7 +78,7 @@ impl Cli {
                     lightyear::prelude::server::ServerPlugins { tick_duration },
                 ));
                 // set up networking entities
-                self.spawn_connections(&mut app);
+                spawn::spawn_connections(&mut app, &Mode::HostClient { client_id: None });
                 app
             }
             None => {
@@ -99,59 +91,7 @@ impl Cli {
     }
 
     pub fn spawn_connections(&self, app: &mut App) {
-        let conditioner = LinkConditionerConfig::average_condition();
-        match self.mode {
-            #[cfg(feature = "client")]
-            Some(Mode::Client { client_id }) => {
-                let _client = app
-                    .world_mut()
-                    .spawn(vysma_net::client::ClientNetwork {
-                        client_id: client_id.expect("You need to specify a client_id via `-c ID`"),
-                        client_port: CLIENT_PORT,
-                        server_addr: SERVER_ADDR,
-                        conditioner: Some(RecvLinkConditioner::new(conditioner.clone())),
-                        transport: ClientTransports::Udp,
-                        // transport: ClientTransports::WebTransport,
-                        // #[cfg(feature = "steam")]
-                        // transport: ClientTransports::Steam,
-                        shared: SHARED_SETTINGS,
-                    })
-                    .id();
-                app.add_systems(Startup, vysma_net::client::connect);
-            }
-            #[cfg(feature = "server")]
-            Some(Mode::Server) => {
-                use vysma_net::server::{start, ServerNetwork, ServerTransports};
-
-                let _server = app
-                    .world_mut()
-                    .spawn(ServerNetwork {
-                        conditioner: None,
-                        transport: ServerTransports::Udp {
-                            local_port: SERVER_PORT,
-                        },
-                        // transport: ServerTransports::WebTransport {
-                        //     local_port: SERVER_PORT,
-                        //     certificate: WebTransportCertificateSettings::FromFile {
-                        //         cert: "./certificates/cert.pem".to_string(),
-                        //         key: "./certificates/key.pem".to_string(),
-                        //     },
-                        // },
-                        // #[cfg(feature = "steam")]
-                        // transport: ServerTransports::Steam {
-                        //     local_port: SERVER_PORT,
-                        // },
-                        shared: SHARED_SETTINGS,
-                    })
-                    .id();
-                app.add_systems(Startup, start);
-            }
-            #[cfg(all(feature = "client", feature = "server"))]
-            Some(Mode::HostClient { client_id: _ }) => {
-                // See commented example for spawning both server and client
-            }
-            _ => {}
-        }
+        if let Some(mode) = &self.mode { spawn::spawn_connections(app, mode); }
     }
 }
 
@@ -229,6 +169,7 @@ pub fn cli() -> Cli {
 pub fn new_gui_app(add_inspector: bool) -> App {
     #[allow(unused_imports)]
     use bevy::winit::WinitPlugin;
+    use bevy::window::WindowPlugin;
 
     #[cfg(target_os = "ios")]
     use std::default;

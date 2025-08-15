@@ -1,43 +1,41 @@
-default:
-	just --list
+set shell := ["/bin/sh", "-cu"]
 
-# Build workspace (default features)
+# Build current crate
 build:
+	cargo build
+
+# Build entire workspace
+build-all:
 	cargo build --workspace
 
-# Build with full features for desktop testing
-build-all:
-	cargo build --workspace --all-features
-
-# Run local server (headless)
+# Run desktop server
 serve:
-	cargo run -- server
+	cargo sv
 
-# Run client with id=1
+# Run desktop client
 client:
-	cargo run -- client -c 1
+	cargo cl
 
-# Publish module (example; requires env)
-publish owner name version hcl assets:
-	cargo run -p vysma -- module publish --owner {{owner}} --name {{name}} --version {{version}} --hcl {{hcl}} --assets {{assets}}
+# Run client+server
+host:
+	cargo hc
 
-# Dry-run publish to compute manifest only
-publish-dry owner name version hcl assets:
-	cargo run -p vysma -- module publish --dry-run --owner {{owner}} --name {{name}} --version {{version}} --hcl {{hcl}} --assets {{assets}}
+# Build with HTTP assets feature
+build-http:
+	cargo build --workspace --features http_assets
 
-# Ensure Appwrite schema (requires env)
+# CLI: dry-run publish manifest
+publish-dry module name version root:
+	cargo run -p vysma -- module publish --dry-run --module {{module}} --version {{name}}-{{version}} --root {{root}}
+
+# New project scaffold
+new name:
+	cargo run -p vysma -- new {{name}}
+
+# Ensure schema (placeholder)
 ensure-schema:
 	cargo run -p vysma -- ensure-schema
 
-# Verify env presence
+# Verify (placeholder)
 verify:
-	cargo run -p vysma -- verify
-
-# Bootstrap a new game repo in ./sandbox/<name>
-new name:
-	mkdir -p sandbox
-	cargo run -p vysma -- new sandbox/{{name}}
-
-# End-to-end local iteration: serve + client (two terminals recommended)
-e2e:
-	@echo "Run 'just serve' in one terminal and 'just client' in another" 
+	cargo run -p vysma -- verify 

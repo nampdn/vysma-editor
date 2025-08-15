@@ -46,7 +46,7 @@ steam = []
 websocket = []
 visualizer = []
 bevygap_client = []
-http_assets = ["vysma-hcl/http_assets"]
+http_assets = ["vysma-hcl/http_assets", "vysma-app/http_assets"]
 
 gui = [
     "bevy/bevy_asset",

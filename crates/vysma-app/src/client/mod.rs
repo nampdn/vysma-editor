@@ -1,4 +1,4 @@
-use crate::protocol::*;
+use crate::protocol::{Inputs, Direction, PlayerId, PlayerPosition, PlayerColor, CursorPosition};
 use bevy::app::Plugin;
 use bevy::input::mouse::MouseButton;
 use bevy::input::touch::{TouchInput, TouchPhase};
@@ -7,7 +7,7 @@ use lightyear::input::native::prelude::*;
 use lightyear::prelude::client::input::InputSet;
 use lightyear::prelude::*;
 
-use crate::protocol::Direction;
+use crate::protocol::Direction as _;
 use crate::shared::{color_from_id, shared_movement_behaviour};
 #[cfg(any(target_os = "ios", target_os = "android"))]
 use crate::InputBindingExt;
