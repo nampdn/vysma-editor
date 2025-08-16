@@ -316,3 +316,33 @@ HCL hooks (see hcl-spec)
 
 Acceptance
 - Zone handoff tests; AOI correctness under load; stable tick; bounded bandwidth; persistence round-trips; basic social flows. 
+
+### Authoritative Flow & Input Pipeline
+
+End‑to‑end loop for fair, responsive play.
+
+1) Capture (client)
+- Sample inputs at frame time; pack as `{ seq, t_client, axes/buttons }`
+- Optionally set local predicted vars for visuals (e.g., dash blend) without committing gameplay state
+
+2) Send (client → server)
+- Unreliable channel for high‑rate inputs; include periodic reliable heartbeats
+- Resend window for packet loss; small client queue for late arrival reconciliation
+
+3) Process (server)
+- Stamp `t_server`; map inputs to HCL events; execute triggers with `authority="server"`
+- Apply actions: vars/components, FSM, sequences, persistence
+- Produce world delta: component changes and `HclSceneBlob` updates
+
+4) Replicate (server → clients)
+- Reliable channel for authoritative state; unreliable for frequent transforms where appropriate
+- Include snapshot baselines as needed; compress/pack common components
+
+5) Render & correct (client)
+- Interpolate/extrapolate transforms; apply authoritative corrections when deltas arrive
+- Reconcile predicted vars to server values; smooth via easing/signals to avoid pops
+
+Authoring rules
+- Mark gameplay triggers `authority="server"`; restrict client triggers to UI/VFX/SFX
+- Use `channel` to hint transport; engine defaults pick safe QoS when omitted
+- Prefer event‑driven HCL; avoid per‑frame polling on client 

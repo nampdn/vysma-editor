@@ -661,6 +661,35 @@ bindings = [ { targets = { name = "Slider" }, path = "UiSlider.value", var = "sf
 trigger "save_sfx" { authority = "server" on = { event = "checkpoint" } actions = [ { persist_save = { binding = "PlayerState" } } ] }
 ``` 
 
+## Authority & Client/Server Flow
+
+Make the split explicit so games remain fair and scalable.
+
+Client (render/input)
+- Binds local input to vars (e.g., `input.move_x`, `input.cast_q`) using bindings or EZ rules
+- Runs UI-only triggers and VFX/SFX (authority="client")
+- Receives replicated world state and `HclSceneBlob` updates; renders and interpolates
+- Optional local prediction: vars marked `predicted` may drive visuals until server correction arrives
+
+Server (authoritative)
+- Processes triggers with `authority="server"` (default for state changes)
+- Mutates vars/components, runs FSM/sequences, executes `persist_*`, emits custom events
+- Publishes diffs/snapshots and replicated components to clients
+
+Trigger metadata (authoring)
+- `authority = "server|client"` — who executes the trigger
+- `channel = "reliable|unreliable"` — network QoS for resulting messages (defaults chosen by engine)
+- Guidance: any stateful or gameplay‑relevant change → server; client reserved for UI/effects
+
+Inputs (transport)
+- Client sends compact input packets (timestamp, seq, device axes/buttons)
+- Server maps inputs to events (e.g., key_held) and runs authoritative triggers
+- Anti‑cheat: server validates rates, cooldowns, ranges; ignores impossible inputs
+
+Bindings and conflicts
+- Two‑way bindings on client only affect local vars/components unless the corresponding trigger is server‑authorized; server updates win on conflict
+- Use `dir` and `authority` wisely: UI selectors/fields on client; gameplay fields on server
+
 ## Beginner‑friendly Syntax (Sugar)
 
 For a gentle learning curve, you can write short, readable sugar that compiles to the canonical HCL shown above. Start simple; add detail only when needed.
