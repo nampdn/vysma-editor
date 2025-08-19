@@ -2,13 +2,22 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
-use chrono::Utc;
 use clap::{Parser, Subcommand};
 use reqwest::blocking::{Client, RequestBuilder};
 use reqwest::blocking::multipart;
 use serde::{Deserialize, Serialize};
+use chrono::Utc;
 use sha2::{Digest, Sha256};
 use walkdir::WalkDir;
+
+mod util;
+mod commands;
+
+fn workspace_root() -> PathBuf {
+	let here = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+	// crates/vysma → workspace root
+	here.join("../..").canonicalize().unwrap_or(here)
+}
 
 #[derive(Parser, Debug)]
 #[command(version, about = "Vysma CLI")] 
@@ -29,7 +38,12 @@ enum Commands {
 	/// Run a client connected to the local server
 	Client {
 		#[arg(short, long, default_value = None)] client_id: Option<u64>,
+		#[arg(long, default_value = None)] connect: Option<String>,
 		#[arg(long, default_value_t = false)] gui: bool,
+	},
+	/// Build and run browser preview (stub)
+	Preview {
+		#[arg(long, default_value_t = false)] open: bool,
 	},
 	/// Module-related commands
 	Module {
@@ -303,40 +317,49 @@ fn upload_assets_and_manifest(http: &Client, api: &str, cfg: &AppwriteCfg, owner
 fn write_scaffold(name: &str) -> anyhow::Result<()> {
 	let root = PathBuf::from(name);
 	if root.exists() { bail!("directory '{}' already exists", name); }
-	fs::create_dir_all(root.join("assets/scenes"))?;
-	fs::create_dir_all(root.join("assets/mesh"))?;
-	fs::create_dir_all(root.join("assets/textures"))?;
-	let hcl = r##"assets { mesh "cube" { builtin = "cube" } material "hero" { pbr = { base_color = "#3aa7ff" } } }
-vars = { speed = 6.0 }
-prefab "Hero" { components = { MeshRef = { mesh = "cube" }, StandardMaterialRef = { material = "hero" }, Transform = { s = [1,1,1] } } }
-entity "root" { children = [ { name = "Player", include = ["Hero"], components = { Transform = { t = [0,1,0] } } } ] }
-triggers { trigger "move_w" { on = { key_held = "KeyW" } target = { name = "Player" } actions = [ { translate_axis = { vec = [0,0,-1], speed_var = "speed" } } ] } }
-"##;
-	fs::write(root.join("assets/scenes/example.hcl"), hcl)?;
-	fs::write(root.join("Cargo.toml"), format!("[workspace]\nmembers=[\n    \"crates/vysma-hcl\",\n    \"crates/vysma-cloud\",\n    \"crates/vysma\"\n]\nresolver=\"2\"\n"))?;
-	fs::create_dir_all(root.join(".git"))?; // don't run git init; just create .gitignore
+	let tmpl = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("templates/basic");
+	if !tmpl.exists() { bail!("template missing: {}", tmpl.display()); }
+	copy_dir_all(&tmpl, &root)?;
 	fs::write(root.join(".gitignore"), "target/\n.DS_Store\n")?;
+	Ok(())
+}
+
+fn copy_dir_all(src: &Path, dst: &Path) -> anyhow::Result<()> {
+	fs::create_dir_all(dst)?;
+	for entry in fs::read_dir(src)? {
+		let entry = entry?;
+		let meta = entry.file_type()?;
+		let to = dst.join(entry.file_name());
+		if meta.is_dir() {
+			copy_dir_all(&entry.path(), &to)?;
+		} else if meta.is_file() {
+			if let Some(parent) = to.parent() { fs::create_dir_all(parent)?; }
+			fs::copy(entry.path(), &to)?;
+		}
+	}
 	Ok(())
 }
 
 fn run_server(_scene: &str, gui: bool) -> anyhow::Result<()> {
 	let mut cmd = std::process::Command::new("cargo");
-	cmd.arg("run").arg("--");
+	cmd.arg("run").arg("-p").arg("bevy-in-app").arg("--");
 	cmd.arg("server");
 	if gui { cmd.arg("--features").arg("gui"); }
 	cmd.env("RUST_LOG", "info");
+	cmd.current_dir(workspace_root());
 	let status = cmd.status().context("run server")?;
 	if !status.success() { bail!("server exited with status {:?}", status.code()); }
 	Ok(())
 }
 
-fn run_client(client_id: Option<u64>, gui: bool) -> anyhow::Result<()> {
+fn run_client(client_id: Option<u64>, _connect: &Option<String>, gui: bool) -> anyhow::Result<()> {
 	let mut cmd = std::process::Command::new("cargo");
-	cmd.arg("run").arg("--");
+	cmd.arg("run").arg("-p").arg("bevy-in-app").arg("--");
 	cmd.arg("client");
 	if let Some(id) = client_id { cmd.arg("-c").arg(id.to_string()); }
 	if gui { cmd.arg("--features").arg("gui"); }
 	cmd.env("RUST_LOG", "info");
+	cmd.current_dir(workspace_root());
 	let status = cmd.status().context("run client")?;
 	if !status.success() { bail!("client exited with status {:?}", status.code()); }
 	Ok(())
@@ -346,84 +369,16 @@ fn main() -> anyhow::Result<()> {
 	dotenvy::dotenv().ok();
 	let cli = Cli::parse();
 	match cli.command {
-		Commands::New { name } => {
-			write_scaffold(&name)?;
-			println!("Scaffolded '{}'\n- assets/\n- Cargo.toml (workspace)\n- .gitignore", name);
-			Ok(())
-		}
-		Commands::Serve { scene: _, gui } => { run_server("assets/moba_hcl/moba_game.hcl", gui) }
-		Commands::Client { client_id, gui } => { run_client(client_id, gui) }
+		Commands::New { name } => { commands::new::run(&name) }
+		Commands::Serve { scene: _, gui } => { commands::serve::run(gui) }
+		Commands::Client { client_id, connect, gui } => { commands::client::run(client_id, &connect, gui) }
+		Commands::Preview { open } => { commands::preview::run(open) }
 		Commands::Module { cmd } => match cmd {
 			ModuleCmd::Publish { owner, name, version, hcl, assets, visibility, desc, set_latest, dry_run, parallel, retries } => {
-				let hcl_content = read_hcl(&hcl)?;
-				let digest = sha256_hex(&hcl_content);
-				// If dry-run: compute manifest (if assets provided) and print summary; skip all network/env
-				if dry_run {
-					let mut manifest: Vec<ManifestRow> = Vec::new();
-					if let Some(dir) = assets.as_ref() {
-						if dir.exists() {
-							// Build manifest locally without uploads
-							let rows = upload_assets_and_manifest(&Client::builder().build()?, "", &AppwriteCfg {
-								endpoint: String::new(), project: String::new(), key: String::new(), database: String::new(), modules_col: String::new(), versions_col: String::new(), assets_bucket_id: String::new(), assets_index_col: None
-							}, &owner, &name, &version, "", dir, parallel, 0, true)?;
-							manifest = rows;
-						}
-					}
-					println!("[dry-run] Module {}::{} v{} (sha={})", owner, name, version, digest);
-					println!("Import with: modules = [{{ name = \"{}::{}\", alias = \"{}\", version = \"{}\" }}]", owner, name, name, version);
-					if !manifest.is_empty() { println!("Manifest ({} entries):", manifest.len()); for r in manifest { println!("  {} -> {} ({} bytes)", r.original_path, r.url_path, r.size); } }
-					return Ok(());
-				}
-
-				// Normal publish path
-				let cfg = cfg_from_env()?;
-				let http = Client::builder().build()?;
-				let api = base_api(&cfg.endpoint);
-				let module_id = create_or_update_module(&http, &api, &cfg, &owner, &name, &version, &visibility, &desc)?;
-
-				let mut manifest: Option<Vec<ManifestRow>> = None;
-				if let Some(dir) = assets.as_ref() { if dir.exists() { let rows = upload_assets_and_manifest(&http, &api, &cfg, &owner, &name, &version, &format!("{}__{}", module_id, version), dir, parallel, retries, false)?; manifest = Some(rows); } }
-
-				let _version_doc_id = create_version(&http, &api, &cfg, &module_id, &version, &digest, &hcl_content, manifest.clone())?;
-				if set_latest { let _ = update_latest_version(&http, &api, &cfg, &module_id, &version); }
-
-				println!("Published module {}::{} v{}", owner, name, version);
-				if let Some(rows) = manifest { println!("Manifest ({} entries):", rows.len()); for r in rows { println!("  {} -> {} ({} bytes)", r.original_path, r.url_path, r.size); } }
-				println!("Import with: modules = [{{ name = \"{}::{}\", alias = \"{}\", version = \"{}\" }}]", owner, name, name, version);
-				Ok(())
+				commands::module::publish::run(owner, name, version, &hcl, assets.as_deref(), visibility, desc, set_latest, dry_run, parallel, retries)
 			}
 		},
-		Commands::EnsureSchema => {
-			let cfg = cfg_from_env()?;
-			let http = Client::builder().build()?;
-			let api = base_api(&cfg.endpoint);
-			// Modules
-			ensure_string_attr(&http, &api, &cfg, &cfg.modules_col, "ownerUserId", 256, true)?;
-			ensure_string_attr(&http, &api, &cfg, &cfg.modules_col, "ownerUsername", 256, true)?;
-			ensure_string_attr(&http, &api, &cfg, &cfg.modules_col, "name", 256, true)?;
-			ensure_string_attr(&http, &api, &cfg, &cfg.modules_col, "latestVersion", 64, true)?;
-			ensure_enum_attr(&http, &api, &cfg, &cfg.modules_col, "visibility", vec!["public".into(), "private".into()], true)?;
-			wait_attrs_available(&http, &api, &cfg, &cfg.modules_col, &["ownerUserId", "ownerUsername", "name", "latestVersion", "visibility"])?;
-			// ModuleVersions
-			ensure_string_attr(&http, &api, &cfg, &cfg.versions_col, "moduleId", 256, true)?;
-			ensure_string_attr(&http, &api, &cfg, &cfg.versions_col, "version", 64, true)?;
-			ensure_string_attr(&http, &api, &cfg, &cfg.versions_col, "sha256", 256, true)?;
-			ensure_string_attr(&http, &api, &cfg, &cfg.versions_col, "hcl", 65535, true)?;
-			ensure_datetime_attr(&http, &api, &cfg, &cfg.versions_col, "createdAt", true)?;
-			// manifest (json) stored inline; Appwrite accepts any JSON; no schema attr required
-			wait_attrs_available(&http, &api, &cfg, &cfg.versions_col, &["moduleId", "version", "sha256", "hcl", "createdAt"])?;
-			// Assets index (optional)
-			if let Some(index_col) = &cfg.assets_index_col {
-				ensure_string_attr(&http, &api, &cfg, index_col, "moduleVersionId", 256, true)?;
-				ensure_string_attr(&http, &api, &cfg, index_col, "path", 1024, true)?;
-				ensure_string_attr(&http, &api, &cfg, index_col, "storageFileId", 256, true)?;
-				ensure_string_attr(&http, &api, &cfg, index_col, "sha256", 256, true)?;
-				ensure_string_attr(&http, &api, &cfg, index_col, "size", 64, true)?;
-				wait_attrs_available(&http, &api, &cfg, index_col, &["moduleVersionId", "path", "storageFileId", "sha256", "size"])?;
-			}
-			println!("Schema ensured");
-			Ok(())
-		}
+		Commands::EnsureSchema => { commands::module::schema::run() }
 		Commands::Verify => {
 			let _ = cfg_from_env()?; println!("Env OK"); Ok(())
 		}
