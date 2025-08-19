@@ -107,6 +107,39 @@ Legend: [x] implemented in code; [ ] not yet.
 - **Provision DB (Planned)**
   - `vysma db provision` reads HCL `models { ... }` and creates/validates Appwrite collections and indexes.
 
+### Local‑first development mode (Priority)
+- Rationale: minimize server storage/egress during development; keep ultra‑low latency by serving HCL and assets from the developer’s machine. “Publish” uploads only when ready.
+- Source of truth
+  - Local files for HCL and assets (project on disk). Editor syncs UI ↔ HCL via an in‑memory doc graph and writes back to local files.
+  - Browser: File System Access API (Chromium) for folder access; fallback desktop wrapper (Tauri) for full portability.
+- Asset I/O for preview
+  - Option A (same‑device): BrowserAssetIo reads bytes from File System Access/OPFS for the embedded preview.
+  - Option B (LAN, recommended): a local HTTP asset server (CLI) serves `assets/` at `http://<dev-host>:<port>` with:
+    - CORS: `Access-Control-Allow-Origin: *`
+    - CORP: `Cross-Origin-Resource-Policy: cross-origin` (required for COEP on the editor origin)
+    - ETag/immutable caching; range requests; optional directory index.
+  - mDNS advertises `{ host, port }` for LAN clients.
+- Cross‑origin isolation and headers
+  - Editor origin sets `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` to enable WASM threads/OffscreenCanvas.
+  - Remote assets must be CORP‑compatible; local asset server adds CORP header above.
+- HCL apply and sync
+  - Editor computes sha and sends `HclUpdateRequest { content, sha, jwt? }` to the local server.
+  - Server parses/merges (no asset uploads), republishes `HclSceneBlob` to all connected clients.
+  - Preview (same tab or other devices on LAN) fetches assets from the local asset server.
+- Multi‑device preview on LAN
+  - Clients connect to the local server for HCL and to the dev’s asset server for resources; discovery via mDNS.
+  - Relay not required in local mode; can be enabled later for Internet testing.
+- Publish workflow (when sharing beyond LAN)
+  - One‑click “Publish”: hash and upload deduped assets to Appwrite; build manifest; create/advance ModuleVersion.
+  - Runtime maps HCL `file` paths to CDN URLs via manifest; HCL content remains unchanged.
+- Security & ergonomics
+  - Asset server binds to localhost by default; `--public`/`--lan` binds `0.0.0.0` with random token (query/header) and rate limits.
+  - Editor warns when COOP/COEP/CORP conditions aren’t met.
+- Acceptance criteria
+  - Edit → Apply → Play on same device without uploads.
+  - Second device on the same LAN previews with low latency (assets streamed from dev host).
+  - Publish swaps to CDN URLs via manifest; remote clients work without the dev asset server.
+
 ---
 
 ### Phased Plan (each step should build green)
