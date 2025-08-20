@@ -49,16 +49,17 @@ Links: see `docs/architecture-plan.md`, `docs/appwrite-integration.md`, `docs/ht
 
 ---
 
-## 2) Content‑addressed assets + manifest (Phase 2.2)
-- Goal: Publish deduped assets and embed manifest in ModuleVersion; runtime maps `file`→CDN URL.
+-## 2) Content‑addressed assets + manifest + bundle index (Phase 2.2)
+- Goal: Publish deduped assets, embed manifest, and upload a bundle `index.toml`; runtime maps `file`→Appwrite Storage URLs.
 - Tasks
-  - Hash assets (sha256), derive ids and `owner/name/<sha>.ext`.
-  - Parallel uploads with retries; 409 → skip.
-  - Build manifest array; persist in ModuleVersion; optional `ModuleAssetsIndex` rows.
+  - Hash assets (sha256), parallel uploads with retries; 409 → skip.
+  - Manifest rows store `url_path = fileId` (flat storage id). Persist manifest as string JSON in ModuleVersion.
+  - Generate and upload `index.toml` with module metadata, deps, and resources; include it in the manifest.
+  - Optional `ModuleAssetsIndex` rows for search/debug.
 - Acceptance
   - `vysma module publish --owner you --name demo --version 0.0.1 --hcl assets/scenes/demo.hcl --assets assets/` prints manifest table; re-run skips unchanged.
 - Files/Crates
-  - `crates/vysma/` — publish command.
+  - `crates/vysma/` — publish command (+ bundle index generation).
   - `crates/vysma-cloud/` — Appwrite client helpers.
 
 ---

@@ -15,8 +15,8 @@ Goal: allow developers to publish reusable HCL modules and import them by `usern
 ### Data model (Appwrite)
 - Collections
   - Modules: { id, ownerUserId, ownerUsername, name, latestVersion, visibility: "public"|"private", description?, tags? }
-  - ModuleVersions: { id, moduleId, version, sha256, hcl (string), manifest (json), createdAt (datetime) }
-  - ModuleAssetsIndex: { id, moduleVersionId, path, storageFileId, sha256, size, original_path }
+  - ModuleVersions: { id, moduleId, version, sha256, hcl (string), manifest (string JSON), createdAt (datetime) }
+  - ModuleAssetsIndex: { id, moduleVersionId, path (fileId), storageFileId, sha256, size, original_path }
 - Storage bucket: `module-assets`
 
 ### Fetch API (server‑side)
@@ -38,10 +38,11 @@ Goal: allow developers to publish reusable HCL modules and import them by `usern
     1) Read HCL; compute SHA256.
     2) Create module if missing (id = `owner__name`); set `latestVersion` if requested.
     3) Create module version with HCL and sha (id = `owner__name__version`).
-    4) Upload assets under deterministic keys `owner/name/<sha256>.ext` to `module-assets` bucket (idempotent; 409 → skip).
-    5) Build a manifest array and persist into ModuleVersion.manifest.
-    6) Optionally index assets in `ModuleAssetsIndex` for search.
-    7) Update Modules.latestVersion when `--set-latest` is enabled (default true).
+    4) Upload assets to Appwrite Storage bucket (flat id space). Each upload uses `fileId = <sha256_prefix_32>`; 409 → skip.
+    5) Build a manifest array (url_path = fileId) and persist into ModuleVersion.manifest (string JSON).
+    6) Generate and upload `index.toml` (bundle index) describing module metadata, dependencies, and all resources; include it in the manifest.
+    7) Optionally index assets in `ModuleAssetsIndex` for search.
+    8) Update Modules.latestVersion when `--set-latest` is enabled (default true).
   - Output: IDs and URLs; print recommended import line and resolved assets summary.
 
 CLI crate: `vysma`
@@ -62,7 +63,8 @@ Bootstrap and dev workflow:
 - During spawn/hot‑reload:
   - For each `ModuleImport` without `path` and `name` contains `::`: fetch ModuleVersion.hcl.
   - Parse to `SceneDoc` and call `merge_module_import` with alias.
-  - Keep the `manifest` in memory for asset URL mapping.
+  - Keep the `manifest` in memory for asset URL mapping (url_path=fileId). For HTTP fetch, build URLs like `{endpoint}/storage/buckets/{bucketId}/files/{fileId}/view`.
+  - Optionally fetch and parse `index.toml` for a complete bundle description.
   - Cache resolved docs by `username::module@version` (pending in‑memory cache).
 
 ### Security and visibility
