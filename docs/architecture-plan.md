@@ -43,7 +43,7 @@ Links:
 - **Module publishing CLI to Appwrite** — [x] Done (`vysma` crate: module publish + assets upload)
 - **Scene persistence to Appwrite on update** — [ ] Planned (MVP+)
 - **HTTP Asset IO (load glTF/images via URLs)** — [ ] Planned (MVP+)
-- **Desktop editor text UI (Apply + status)** — [ ] Planned (MVP)
+- **Desktop editor text UI (Apply + status)** — [x] Done
 - **Editor auth (JWT) to gate updates** — [ ] Planned (MVP)
 - **Rollback to previous version** — [ ] Planned (Post‑MVP)
 - **Flattened single‑doc publish (includes/modules)** — [ ] Planned (Post‑MVP)

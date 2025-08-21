@@ -8,6 +8,105 @@ use lightyear::prelude::client::input::InputSet;
 use lightyear::prelude::*;
 
 use crate::protocol::Direction as _;
+#[cfg(all(feature = "gui", feature = "client"))]
+pub mod editor_ui {
+    use bevy::prelude::*;
+    use vysma_hcl::hcl::{EditorMode, EditorState};
+    use vysma_hcl::hcl::net::{HclSceneBlob, HclUpdateRequest};
+    use lightyear::prelude::*;
+    use sha2::{Digest, Sha256};
+
+    #[derive(Resource, Default)]
+    pub struct EditorBuffer {
+        pub text: String,
+        pub dirty: bool,
+    }
+
+    #[derive(Resource, Default)]
+    pub struct LastApplied {
+        pub sha: Option<String>,
+        pub ts_secs: Option<u64>,
+    }
+
+    pub struct EditorUiPlugin;
+    impl Plugin for EditorUiPlugin {
+        fn build(&self, app: &mut App) {
+            app.init_resource::<EditorBuffer>();
+            app.init_resource::<LastApplied>();
+            app.add_systems(Update, (initial_buffer_sync, ui_panel));
+        }
+    }
+
+    fn sha256_str(s: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(s.as_bytes());
+        format!("{:x}", hasher.finalize())
+    }
+
+    fn initial_buffer_sync(
+        net: Query<&HclSceneBlob, Changed<HclSceneBlob>>,
+        mut buffer: ResMut<EditorBuffer>,
+        mut last: ResMut<LastApplied>,
+    ) {
+        if let Some(blob) = net.iter().next() {
+            if !buffer.dirty || buffer.text.is_empty() {
+                if let Some(content) = &blob.content {
+                    buffer.text = content.clone();
+                    buffer.dirty = false;
+                    last.sha = Some(blob.sha256.clone());
+                    last.ts_secs = Some(current_unix());
+                }
+            }
+        }
+    }
+
+    fn current_unix() -> u64 {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0)
+    }
+
+    fn ui_panel(
+        mut egui_ctx: bevy_inspector_egui::bevy_egui::EguiContexts,
+        mut buffer: ResMut<EditorBuffer>,
+        mut last: ResMut<LastApplied>,
+        mode: Res<EditorState>,
+        net: Query<&HclSceneBlob>,
+        mut commands: Commands,
+    ) {
+        use bevy_inspector_egui::egui;
+        let ctx = egui_ctx.ctx_mut().expect("egui context");
+        egui::Window::new("Vysma Editor").show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Mode:");
+                ui.monospace(match mode.0 { EditorMode::Edit => "Edit", EditorMode::Preview => "Preview" });
+            });
+            ui.separator();
+            ui.label("HCL");
+            let mut_text = &mut buffer.text;
+            let resp = ui.add(egui::TextEdit::multiline(mut_text).desired_rows(20).desired_width(f32::INFINITY));
+            if resp.changed() { buffer.dirty = true; }
+            ui.horizontal(|ui| {
+                let can_apply = matches!(mode.0, EditorMode::Edit);
+                if ui.add_enabled(can_apply, egui::Button::new("Apply")).clicked() {
+                    let content = buffer.text.clone();
+                    let sha = sha256_str(&content);
+                    let path = net.iter().next().map(|b| b.path.clone()).unwrap_or_else(|| "mem://active.hcl".to_string());
+                    commands.spawn((
+                        HclUpdateRequest { path: Some(path), sha256: sha.clone(), content },
+                        Replicate::to_server(),
+                        Name::new("HclUpdateRequest"),
+                    ));
+                    buffer.dirty = false;
+                    last.sha = Some(sha);
+                    last.ts_secs = Some(current_unix());
+                }
+                let sha = last.sha.as_deref().unwrap_or("-");
+                let ts = last.ts_secs.map(|t| t.to_string()).unwrap_or("-".to_string());
+                ui.label(format!("last: {} @ {}", sha, ts));
+            });
+        });
+    }
+}
 use crate::shared::{color_from_id, shared_movement_behaviour};
 #[cfg(any(target_os = "ios", target_os = "android"))]
 use crate::InputBindingExt;

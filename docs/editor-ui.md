@@ -31,11 +31,11 @@ Goal: Minimal, usable editor panel for authoring HCL and applying updates live.
   - Apply handler: spawn `HclUpdateRequest` to server.
 
 ### Checklist
-- [ ] Buffer sync from live content
-- [ ] Apply button sends update
-- [ ] Mode toggle integrated with global `EditorState`
-- [ ] Status line shows sha/time
-- [ ] Disable Apply in Preview mode (optional)
+- [x] Buffer sync from live content
+- [x] Apply button sends update
+- [x] Mode toggle integrated with global `EditorState`
+- [x] Status line shows sha/time
+- [x] Disable Apply in Preview mode
 
 ---
 

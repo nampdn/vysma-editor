@@ -64,7 +64,7 @@ Links: see `docs/architecture-plan.md`, `docs/appwrite-integration.md`, `docs/ht
 
 ---
 
-## 3) Editor UI (desktop) — minimal (Phase 3 part A)
+## 3) Editor UI (desktop) — minimal (Phase 3 part A) — Done
 - Goal: In-app panel with Edit/Preview toggle, multiline editor, Apply, status.
 - Tasks
   - Feature gate: `gui && client`.
@@ -72,7 +72,7 @@ Links: see `docs/architecture-plan.md`, `docs/appwrite-integration.md`, `docs/ht
   - Systems: buffer sync from `HclSceneBlob` (first time), Apply → send `HclUpdateRequest`.
   - Disable Apply in Preview; show last sha/time.
 - Acceptance
-  - F5 toggles modes; Apply in Edit updates server; clients respawn.
+  - F5 toggles modes; Apply in Edit updates server; clients respawn. [Done]
 - Files/Crates
   - `crates/vysma-app/` — client GUI systems under `features = ["gui", "client"]`.
   - `docs/editor-ui.md` — check off MVP items.

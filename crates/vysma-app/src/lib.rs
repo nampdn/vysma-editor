@@ -13,3 +13,6 @@ pub mod server;
 pub mod common;
 pub mod renderer;
 pub mod shared; 
+
+#[cfg(all(feature = "gui", feature = "client"))]
+pub use client::editor_ui::EditorUiPlugin;

@@ -46,6 +46,11 @@ impl Cli {
                     #[cfg(feature = "gui")]
                     ClientRendererPlugin::new(format!("Client {client_id:?}")),
                 ));
+                #[cfg(all(feature = "gui", feature = "client"))]
+                {
+                    use crate::EditorUiPlugin;
+                    app.add_plugins(EditorUiPlugin);
+                }
                 // set up networking entities
                 spawn::spawn_connections(&mut app, &Mode::Client { client_id });
                 app

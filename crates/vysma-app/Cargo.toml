@@ -27,3 +27,4 @@ rand = "0.9.2"
 cfg-if = "1.0"
 bevy-inspector-egui = { version = "0.32", default-features = false, features = ["bevy_pbr", "bevy_image", "bevy_render", "egui_open_url"] }
 serde = { version = "1", features = ["derive"] } 
+sha2 = "0.10"

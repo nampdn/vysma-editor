@@ -7659,6 +7659,7 @@ dependencies = [
  "lightyear",
  "rand 0.9.2",
  "serde",
+ "sha2",
  "vysma-hcl",
  "vysma-net",
  "vysma-platform",

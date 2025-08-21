@@ -8,10 +8,13 @@
   - `just build` — build current crate
   - `just build-all` — build entire workspace
   - `just serve` — run desktop server
+  - `just serve-quick 5` — run server for 5s and auto-exit (useful in CI)
   - `just client` — run desktop client
+  - `just client-quick 5` — run client for 5s and auto-exit (useful in CI)
   - `just host` — run host-client
+  - `just host-quick 8` — run server+client for 8s and auto-exit
   - `just build-http` — build workspace with HTTP assets
-  - `just publish-dry module name version root` — dry-run manifest for a module
+  - `just module-publish-dry owner name version hcl assets` — dry-run publish; pass '-' for no assets
 
 - Cargo aliases (via `.cargo/config.toml`):
   - `cargo cl` — run client (GUI)
@@ -27,7 +30,7 @@
   - `vysma preview --open` — build/run WASM browser preview connecting to the local server/relay
 
 - Typical flow:
-  1) `cargo run -p vysma -- new demo`
+  1) `cargo run -p vysma -- new demo` or `cargo run -p vysma -- new --template editor_game demo`
   2) `vysma login --endpoint https://appwrite.dev/v1 --project <id> --profile dev`
   3) `vysma serve` (server) and `vysma client --connect lan` (client)
   4) Edit HCL and assets; server hot‑reloads; connected clients update live

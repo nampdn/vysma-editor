@@ -29,7 +29,7 @@ struct Cli {
 #[derive(Subcommand, Debug)]
 enum Commands {
 	/// Bootstrap a new Vysma project
-	New { name: String },
+	New { name: String, #[arg(long, default_value = "basic")] template: String, #[arg(long, default_value_t = false)] overwrite: bool },
 	/// Run the authoritative server with hot-reload
 	Serve {
 		#[arg(long, default_value_t = String::from("assets/moba_hcl/moba_game.hcl"))] scene: String,
@@ -369,7 +369,7 @@ fn main() -> anyhow::Result<()> {
 	dotenvy::dotenv().ok();
 	let cli = Cli::parse();
 	match cli.command {
-		Commands::New { name } => { commands::new::run(&name) }
+		Commands::New { name, template, overwrite } => { commands::new::run(&name, &template, overwrite) }
 		Commands::Serve { scene: _, gui } => { commands::serve::run(gui) }
 		Commands::Client { client_id, connect, gui } => { commands::client::run(client_id, &connect, gui) }
 		Commands::Preview { open } => { commands::preview::run(open) }
