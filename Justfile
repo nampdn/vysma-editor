@@ -1,120 +1,102 @@
-set shell := ["/bin/sh", "-cu"]
+# Vysma Development Commands
+# Use `just <command>` to run these recipes
 
-# Build current crate
-build:
+# Build commands
+build: ## Build current crate
 	cargo build
 
-# Build entire workspace
-build-all:
+build-all: ## Build entire workspace
 	cargo build --workspace
 
-# Run desktop server
-serve:
-	cargo run -p vysma -- serve --gui
+build-http: ## Build with HTTP assets feature
+	cargo build --workspace --features "vysma-app/http_assets"
 
-# Run desktop server with timeout (default 10s)
-serve-quick secs="10":
-	( cargo run -p vysma -- serve --gui & pid=$!; sleep {{secs}}; kill $pid >/dev/null 2>&1 || true )
-
-# Run desktop client
-client:
-	cargo run -p vysma -- client --gui
-
-# Run desktop client with timeout (default 10s)
-client-quick secs="10":
-	( cargo run -p vysma -- client --gui & pid=$!; sleep {{secs}}; kill $pid >/dev/null 2>&1 || true )
-
-# Run desktop server (no GUI)
-serve-nogui:
+# Development server/client commands
+serve: ## Run desktop server with auto-discovery
 	cargo run -p vysma -- serve
 
-# Run desktop client (no GUI)
-client-nogui:
-	cargo run -p vysma -- client
+serve-nogui: ## Run server without GUI
+	cargo run -p vysma -- serve --gui false
 
-# Run client+server
-host:
-	( cargo run -p vysma -- serve --gui & ) ; sleep 2 ; cargo run -p vysma -- client --gui
+serve-quick: ## Run server with timeout (for testing)
+	timeout 10s cargo run -p vysma -- serve || true
 
-# Run client+server with timeout (default 12s)
-host-quick secs="12":
-	( cargo run -p vysma -- serve --gui & sp=$!; sleep 2; cargo run -p vysma -- client --gui & cp=$!; sleep {{secs}}; kill $sp >/dev/null 2>&1 || true; kill $cp >/dev/null 2>&1 || true )
+client: ## Run desktop client with auto-discovery
+	cargo run -p vysma -- client --gui
 
-# Build with HTTP assets feature
-build-http:
-	cargo build --workspace --features http_assets
+client-nogui: ## Run client without GUI
+	cargo run -p vysma -- client --gui false
 
-# CLI: generic passthrough to vysma
-vysma +args:
+client-quick: ## Run client with timeout (for testing)
+	timeout 8s cargo run -p vysma -- client --gui || true
+
+host: ## Run host-client (server + client)
+	cargo run -p vysma -- host
+
+host-quick: ## Run host with timeout (for testing)
+	timeout 15s cargo run -p vysma -- host || true
+
+# Project scaffolding
+new name: ## Create new basic project
+	vysma new {{name}}
+
+new-editor name: ## Create new editor-as-game project
+	vysma new --template editor_game {{name}}
+
+new-editor-f name: ## Force create editor project (overwrite existing)
+	vysma new --template editor_game --overwrite {{name}}
+
+# CLI management
+install-vysma: ## Install vysma CLI globally
+	cargo install --path crates/vysma
+
+install-vysma-local: ## Install vysma CLI locally (for development)
+	cargo install --path crates/vysma --force
+
+uninstall-vysma: ## Uninstall vysma CLI
+	cargo uninstall vysma
+
+# Module publishing
+module-publish-dry owner name version hcl assets: ## Dry-run module publish
+	vysma module publish --owner {{owner}} --name {{name}} --version {{version}} --hcl {{hcl}} --assets {{assets}} --dry-run
+
+# Generic CLI passthrough
+vysma +args: ## Pass arguments to vysma CLI
 	cargo run -p vysma -- {{args}}
 
-# CLI: preview (browser stub)
-preview:
-	cargo run -p vysma -- preview --open
+# Preview and testing
+preview: ## Build and run browser preview
+	vysma preview --open
 
-# CLI: dry-run publish manifest (assets: path or '-')
-module-publish-dry owner name version hcl assets:
-	if [ "{{assets}}" = "-" ]; then \
-		cargo run -p vysma -- module publish --dry-run --owner {{owner}} --name {{name}} --version {{version}} --hcl {{hcl}} ; \
-	else \
-		cargo run -p vysma -- module publish --dry-run --owner {{owner}} --name {{name}} --version {{version}} --hcl {{hcl}} --assets {{assets}} ; \
-	fi
+# Development utilities
+clean: ## Clean build artifacts
+	cargo clean
 
-# CLI: real publish (assets: path or '-')
-module-publish owner name version hcl assets:
-	if [ "{{assets}}" = "-" ]; then \
-		cargo run -p vysma -- module publish --owner {{owner}} --name {{name}} --version {{version}} --hcl {{hcl}} ; \
-	else \
-		cargo run -p vysma -- module publish --owner {{owner}} --name {{name}} --version {{version}} --hcl {{hcl}} --assets {{assets}} ; \
-	fi
-
-# New project scaffold
-new name:
-	cargo run -p vysma -- new {{name}}
-
-# New project scaffold with template (basic or editor_game)
-new-editor name:
-	cargo run -p vysma -- new --template editor_game {{name}}
-
-# Force new editor project (overwrite)
-new-editor-f name:
-	cargo run -p vysma -- new --template editor_game --overwrite {{name}}
-
-# Ensure schema (placeholder)
-ensure-schema:
-	cargo run -p vysma -- ensure-schema
-
-# Verify (placeholder)
-verify:
-	cargo run -p vysma -- verify 
-
-# Build only CLI crate
-build-cli:
-	cargo build -p vysma
-
-# Tests
-test:
-	cargo test
-
-test-all:
-	cargo test --workspace
-
-# Quick typecheck
-check:
+check: ## Check code without building
 	cargo check --workspace
 
-# Install vysma CLI into ~/.cargo/bin (global on PATH)
-install-vysma:
-	cargo install --path crates/vysma --force
-	(which vysma && vysma --help >/dev/null 2>&1 && echo "Installed: $(which vysma)") || echo "Note: add \"~/.cargo/bin\" to your PATH"
+test: ## Run tests
+	cargo test --workspace
 
-# Install using local release build (alternative fast reinstall)
-install-vysma-local:
-	cargo build -p vysma --release
-	mkdir -p $$HOME/.cargo/bin
-	cp target/release/vysma $$HOME/.cargo/bin/vysma
-	(which vysma && echo "Installed: $(which vysma)") || echo "Note: add \"~/.cargo/bin\" to your PATH"
+fmt: ## Format code
+	cargo fmt
 
-# Uninstall vysma CLI
-uninstall-vysma:
-	cargo uninstall vysma || true
+clippy: ## Run clippy linter
+	cargo clippy --workspace
+
+# Quick development workflow
+dev-setup: ## Setup new development environment
+	just install-vysma-local
+	just new demo
+	cd demo
+	just serve
+
+dev-test: ## Test the development workflow
+	just new test-project
+	cd test-project
+	just serve-quick
+	just client-quick
+
+# Help
+help: ## Show this help
+	@just --list

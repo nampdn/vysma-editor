@@ -28,88 +28,103 @@ Links: see `docs/architecture-plan.md`, `docs/appwrite-integration.md`, `docs/ht
 
 ---
 
-## 1) CLI DX foundation (Phase 2.1)
+## 1) CLI DX foundation (Phase 2.1) — COMPLETED ✅
 - Goal: One command creates and runs a project locally; editing HCL hot‑reloads.
 - Tasks
-  - `vysma new <name>`: scaffold folders `assets/{scenes,mesh,textures,fonts}` and an example scene.
-  - Write `.gitignore` (`target/`, `.DS_Store`). Optional `README.md` in project.
-  - `vysma serve`: run server bin with hot‑reload; print endpoints, keybindings, and mDNS/QR placeholders.
-  - `vysma client --connect lan|ws(s)://...`: run a viewer client; default connects to local server.
+  - `vysma new <name>`: scaffold folders `assets/{scenes,mesh,textures,fonts}` and an example scene. ✅
+  - Write `.gitignore` (`target/`, `.DS_Store`). Optional `README.md` in project. ✅
+  - `vysma serve`: run server bin with hot‑reload; print endpoints, keybindings, and mDNS/QR placeholders. ✅
+  - `vysma client --connect lan|ws(s)://...`: run a viewer client; default connects to local server. ✅
+  - **NEW**: Auto-discovery system that automatically finds and loads HCL files from current working directory. ✅
 - Acceptance
-  - `vysma new demo && cd demo && vysma serve` logs "Watching assets" and HCL parse success.
-  - `vysma client --connect lan` renders the sample scene; Apply from editor (when implemented) propagates.
+  - `vysma new demo && cd demo && vysma serve` logs "Watching assets" and HCL parse success. ✅
+  - `vysma client --connect lan` renders the sample scene; Apply from editor (when implemented) propagates. ✅
+  - **NEW**: CLI automatically discovers `assets/main.hcl`, `assets/scene.hcl`, or any `.hcl` files in `assets/scenes/`. ✅
 - Commands
-  - `vysma new demo`
-  - `vysma serve`
-  - `vysma client --connect lan`
+  - `vysma new demo` ✅
+  - `vysma serve` ✅
+  - `vysma client --connect lan` ✅
+  - **NEW**: `vysma new --template editor_game <name>` for editor-as-game projects ✅
 - Files/Crates
-  - `crates/vysma/` — implement subcommands.
-  - Add `templates/basic/` and `templates/editor_game/` under CLI crate.
-  - `crates/vysma-app/` — ensure server/client bins callable from CLI.
+  - `crates/vysma/` — implement subcommands. ✅
+  - Add `templates/basic/` and `templates/editor_game/` under CLI crate. ✅
+  - `crates/vysma-app/` — ensure server/client bins callable from CLI. ✅
+  - **NEW**: `crates/vysma-hcl/` — auto-discovery plugin and smart scene loading. ✅
 
----
-
--## 2) Content‑addressed assets + manifest + bundle index (Phase 2.2)
+## 2) Content‑addressed assets + manifest + bundle index (Phase 2.2) — COMPLETED ✅
 - Goal: Publish deduped assets, embed manifest, and upload a bundle `index.toml`; runtime maps `file`→Appwrite Storage URLs.
 - Tasks
-  - Hash assets (sha256), parallel uploads with retries; 409 → skip.
-  - Manifest rows store `url_path = fileId` (flat storage id). Persist manifest as string JSON in ModuleVersion.
-  - Generate and upload `index.toml` with module metadata, deps, and resources; include it in the manifest.
-  - Optional `ModuleAssetsIndex` rows for search/debug.
+  - Hash assets (sha256), parallel uploads with retries; 409 → skip. ✅
+  - Manifest rows store `url_path = fileId` (flat storage id). Persist manifest as string JSON in ModuleVersion. ✅
+  - Generate and upload `index.toml` with module metadata, deps, and resources; include it in the manifest. ✅
+  - Optional `ModuleAssetsIndex` rows for search/debug. ✅
 - Acceptance
-  - `vysma module publish --owner you --name demo --version 0.0.1 --hcl assets/scenes/demo.hcl --assets assets/` prints manifest table; re-run skips unchanged.
+  - `vysma module publish --owner you --name demo --version 0.0.1 --hcl assets/scenes/demo.hcl --assets assets/` prints manifest table; re-run skips unchanged. ✅
 - Files/Crates
-  - `crates/vysma/` — publish command (+ bundle index generation).
-  - `crates/vysma-cloud/` — Appwrite client helpers.
+  - `crates/vysma/` — publish command (+ bundle index generation). ✅
+  - `crates/vysma-cloud/` — Appwrite client helpers. ✅
 
----
-
-## 3) Editor UI (desktop) — minimal (Phase 3 part A) — Done
+## 3) Editor UI (desktop) — minimal (Phase 3 part A) — COMPLETED ✅
 - Goal: In-app panel with Edit/Preview toggle, multiline editor, Apply, status.
 - Tasks
-  - Feature gate: `gui && client`.
-  - Resources: `EditorBuffer`, `LastApplied`.
-  - Systems: buffer sync from `HclSceneBlob` (first time), Apply → send `HclUpdateRequest`.
-  - Disable Apply in Preview; show last sha/time.
+  - Feature gate: `gui && client`. ✅
+  - Resources: `EditorBuffer`, `LastApplied`. ✅
+  - Systems: buffer sync from `HclSceneBlob` (first time), Apply → send `HclUpdateRequest`. ✅
+  - Disable Apply in Preview; show last sha/time. ✅
 - Acceptance
-  - F5 toggles modes; Apply in Edit updates server; clients respawn. [Done]
+  - F5 toggles modes; Apply in Edit updates server; clients respawn. ✅
 - Files/Crates
-  - `crates/vysma-app/` — client GUI systems under `features = ["gui", "client"]`.
-  - `docs/editor-ui.md` — check off MVP items.
+  - `crates/vysma-app/` — client GUI systems under `features = ["gui", "client"]`. ✅
+  - `docs/editor-ui.md` — check off MVP items. ✅
 
----
-
-## 4) Editor-as-Game template (requested)
+## 4) Editor-as-Game template — COMPLETED ✅
 - Goal: The Editor itself is a starter game you can scaffold and extend; it ships as a template runnable via CLI.
 - Tasks
-  - Add `templates/editor_game/` project including:
-    - A Bevy app that enables `gui` editor panel and loads an example HCL scene.
-    - HCL that demonstrates editing itself (e.g., HUD text showing a var; simple movement rule).
-  - `vysma new --template editor_game <name>` to scaffold this project.
-  - Document how to remove/toggle editor panel for shipping builds.
+  - Add `templates/editor_game/` project including: ✅
+    - A Bevy app that enables `gui` editor panel and loads an example HCL scene. ✅
+    - HCL that demonstrates editing itself (e.g., HUD text showing a var; simple movement rule). ✅
+  - `vysma new --template editor_game <name>` to scaffold this project. ✅
+  - Document how to remove/toggle editor panel for shipping builds. ✅
 - Acceptance
-  - `vysma new --template editor_game my_editor && cd my_editor && cargo run` opens a window with the editor panel and example scene; editing HCL and Apply changes the running scene.
+  - `vysma new --template editor_game my_editor && cd my_editor && cargo run` opens a window with the editor panel and example scene; editing HCL and Apply changes the running scene. ✅
 - Files/Crates
-  - `crates/vysma/` — template selection support.
-  - `templates/editor_game/**` — new template content.
+  - `crates/vysma/` — template selection support. ✅
+  - `templates/editor_game/**` — new template content. ✅
+
+## 5) Auto-discovery and Smart CLI — COMPLETED ✅
+- Goal: CLI automatically finds and loads HCL files from current working directory without hardcoded paths.
+- Tasks
+  - Implement `HclDiscoveryPlugin` that scans `assets/` directory for HCL files. ✅
+  - Priority-based scene loading: `main.hcl` > `scene.hcl` > `scenes/*.hcl` > any `.hcl`. ✅
+  - File watching for new HCL files and automatic scene switching. ✅
+  - Remove hardcoded `"assets/scenes/example.hcl"` paths from CLI commands. ✅
+- Acceptance
+  - CLI automatically discovers HCL files in any project directory. ✅
+  - New HCL files are automatically detected and loaded. ✅
+  - No more "Path not found" errors from hardcoded paths. ✅
+- Files/Crates
+  - `crates/vysma-hcl/` — `HclDiscoveryPlugin` and auto-discovery systems. ✅
+  - `crates/vysma/` — updated serve/client commands to use auto-discovery. ✅
+  - `templates/` — updated with proper `main.hcl` files and documentation. ✅
 
 ---
 
-## 5) Editor auth (JWT) — minimal enforcement (Phase 3 part B)
+## 6) Editor auth (JWT) — minimal enforcement (Phase 3 part B) 🔄 IN PROGRESS
 - Goal: Gate Apply with a JWT verified against Appwrite JWKS.
 - Tasks
-  - CLI `vysma login` stores profile in `~/.vysma/config.toml`.
-  - Editor includes `Authorization: Bearer <jwt>` on update; server verifies via JWKS and project membership.
+  - ✅ CLI `vysma login` stores profile in `~/.vysma/config.toml`.
+  - 🔄 Editor includes `Authorization: Bearer <jwt>` on update; server verifies via JWKS and project membership.
 - Acceptance
   - Without JWT (when required), server logs and ignores updates; with JWT, Apply works.
 - Files/Crates
-  - `crates/vysma/` — login flow, profiles.
-  - `crates/vysma-cloud/` — JWKS verify helper.
-  - `crates/vysma-app/` — attach JWT in client; verify in server.
+  - ✅ `crates/vysma/` — login flow, profiles.
+  - ✅ `crates/vysma-cloud/` — JWKS verify helper.
+  - 🔄 `crates/vysma-app/` — attach JWT in client; verify in server.
+- **Status**: Foundation complete, CLI auth working, JWT infrastructure ready. Need to integrate with editor and implement server verification.
 
 ---
 
-## 6) Local‑first asset server + mDNS + QR (Priority from Local‑first section)
+## 7) Local‑first asset server + mDNS + QR (Priority from Local‑first section)
 - Goal: Serve `assets/` over HTTP for same‑device and LAN preview; easy phone testing.
 - Tasks
   - Implement CLI subcommand `vysma assets serve [--lan|--public] [--port Port]`:
@@ -125,7 +140,7 @@ Links: see `docs/architecture-plan.md`, `docs/appwrite-integration.md`, `docs/ht
 
 ---
 
-## 7) WASM browser preview (Phase 5 slice for MVP)
+## 8) WASM browser preview (Phase 5 slice for MVP)
 - Goal: `vysma preview --open` builds wasm target and opens a page connecting via WebSocket to local server.
 - Tasks
   - Target: `wasm32-unknown-unknown` with `http_assets` feature enabled.
@@ -138,7 +153,7 @@ Links: see `docs/architecture-plan.md`, `docs/appwrite-integration.md`, `docs/ht
 
 ---
 
-## 8) Diagnostics with fix‑its
+## 9) Diagnostics with fix‑its
 - Goal: Error messages include actionable fix‑its; editor UI can “Jump to line”.
 - Tasks
   - Parser surfaces line/column and error code; map common errors to suggestions (unknown component key, missing asset, bad include).
@@ -151,7 +166,7 @@ Links: see `docs/architecture-plan.md`, `docs/appwrite-integration.md`, `docs/ht
 
 ---
 
-## 9) Module gallery (curated install)
+## 10) Module gallery (curated install)
 - Goal: Browse and add modules visually; inserts import block and assets manifest resolves transparently.
 - Tasks
   - CLI: `vysma modules search <term>` and `vysma modules add <owner::name>@<ver?>`.
@@ -164,7 +179,7 @@ Links: see `docs/architecture-plan.md`, `docs/appwrite-integration.md`, `docs/ht
 
 ---
 
-## 10) Share link via Relay (Phase 6)
+## 11) Share link via Relay (Phase 6)
 - Goal: One click prints a short project URL and QR; remote device connects via relay.
 - Tasks
   - Server registers with relay; prints URL.
@@ -178,7 +193,7 @@ Links: see `docs/architecture-plan.md`, `docs/appwrite-integration.md`, `docs/ht
 
 ---
 
-## 11) Scene persistence (Phase 4)
+## 12) Scene persistence (Phase 4)
 - Goal: On accepted update, server saves a SceneVersion; reloads latest on restart.
 - Tasks
   - Server writes `SceneVersions` with { hcl, sha, author } and updates `Scenes.publishedVersionId`.

@@ -76,7 +76,7 @@ pub mod editor_ui {
     ) {
         use bevy_inspector_egui::egui;
         let Ok(ctx) = egui_ctx.ctx_mut() else { return; };
-        egui::Window::new("Vysma Editor").show(ctx, |ui| {
+        bevy_inspector_egui::egui::Window::new("Vysma Editor").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Mode:");
                 ui.monospace(match mode.0 { EditorMode::Edit => "Edit", EditorMode::Preview => "Preview" });
@@ -93,7 +93,12 @@ pub mod editor_ui {
                     let sha = sha256_str(&content);
                     let path = net.iter().next().map(|b| b.path.clone()).unwrap_or_else(|| "mem://active.hcl".to_string());
                     commands.spawn((
-                        HclUpdateRequest { path: Some(path), sha256: sha.clone(), content },
+                        HclUpdateRequest { 
+                            path: Some(path), 
+                            sha256: sha.clone(), 
+                            content,
+                            authorization: None, // TODO: Add JWT from auth profile
+                        },
                         Replicate::to_server(),
                         Name::new("HclUpdateRequest"),
                     ));

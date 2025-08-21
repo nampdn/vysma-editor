@@ -175,4 +175,6 @@ pub fn install_appwrite_provider_if_env(app: &mut App) {
             app.insert_resource(vysma_hcl::hcl::remote::AssetBaseUrl(base));
         }
     }
-} 
+}
+
+pub mod jwt; 

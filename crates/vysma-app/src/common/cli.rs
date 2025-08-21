@@ -189,6 +189,7 @@ pub fn new_gui_app(add_inspector: bool) -> App {
                 // https://github.com/bevyengine/bevy/issues/10157
                 meta_check: bevy::asset::AssetMetaCheck::Never,
                 watch_for_changes_override: Some(true),
+                file_path: detect_assets_root().to_string_lossy().into_owned(),
                 ..default()
             })
             .set(log::log_plugin())
@@ -228,7 +229,30 @@ pub fn new_gui_app(add_inspector: bool) -> App {
     if add_inspector {
         app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new());
     }
+    // Ensure there is a camera for UI/rendering
+    fn ensure_camera(mut commands: Commands, existing: Query<Entity, With<Camera>>) {
+        if existing.is_empty() {
+            commands.spawn(Camera2d);
+        }
+    }
+    app.add_systems(Startup, ensure_camera);
     app
+}
+
+#[cfg(not(target_os = "ios"))]
+fn detect_assets_root() -> std::path::PathBuf {
+    use std::path::PathBuf;
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let proj_assets = cwd.join("assets");
+    if proj_assets.exists() { return proj_assets; }
+    // Fallback to binary dir/assets
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let p = dir.join("assets");
+            if p.exists() { return p; }
+        }
+    }
+    cwd.join("assets")
 }
 
 pub fn new_headless_app() -> App {

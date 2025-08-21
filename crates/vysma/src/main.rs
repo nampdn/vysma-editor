@@ -50,6 +50,11 @@ enum Commands {
 		#[command(subcommand)]
 		cmd: ModuleCmd,
 	},
+	/// Authentication and profile management
+	Auth {
+		#[command(subcommand)]
+		cmd: AuthCmd,
+	},
 	/// Ensure Appwrite schema
 	EnsureSchema,
 	/// Verify config/env
@@ -72,6 +77,23 @@ enum ModuleCmd {
 		#[arg(long, default_value_t = 4)] parallel: usize,
 		#[arg(long, default_value_t = 3)] retries: usize,
 	},
+}
+
+#[derive(Subcommand, Debug)]
+enum AuthCmd {
+	/// Login to Appwrite and store credentials
+	Login {
+		#[arg(long)] endpoint: String,
+		#[arg(long)] project: String,
+		#[arg(long, default_value = "dev")] profile: String,
+		#[arg(long)] key: String,
+	},
+	/// Logout and remove profile
+	Logout {
+		#[arg(long)] profile: String,
+	},
+	/// List configured profiles
+	List,
 }
 
 #[derive(Clone)]
@@ -376,6 +398,17 @@ fn main() -> anyhow::Result<()> {
 		Commands::Module { cmd } => match cmd {
 			ModuleCmd::Publish { owner, name, version, hcl, assets, visibility, desc, set_latest, dry_run, parallel, retries } => {
 				commands::module::publish::run(owner, name, version, &hcl, assets.as_deref(), visibility, desc, set_latest, dry_run, parallel, retries)
+			}
+		},
+		Commands::Auth { cmd } => match cmd {
+			AuthCmd::Login { endpoint, project, profile, key } => {
+				commands::auth::login(commands::auth::LoginArgs { endpoint, project, profile, key })
+			}
+			AuthCmd::Logout { profile } => {
+				commands::auth::logout(&profile)
+			}
+			AuthCmd::List => {
+				commands::auth::list_profiles()
 			}
 		},
 		Commands::EnsureSchema => { commands::module::schema::run() }

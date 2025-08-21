@@ -17,6 +17,7 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "1"
+jsonwebtoken = "9.0"
 vysma-hcl = { path = "../vysma-hcl" }
 bevy = { version = "0.16", default-features = false }
 unofficial_appwrite = "1"

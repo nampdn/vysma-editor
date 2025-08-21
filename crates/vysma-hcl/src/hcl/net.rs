@@ -23,6 +23,7 @@ pub struct HclUpdateRequest {
     pub path: Option<String>,
     pub sha256: String,
     pub content: String,
+    pub authorization: Option<String>,
 }
 
 #[derive(Component)]
@@ -258,7 +259,12 @@ fn editor_demo_send(
     if let Some(s) = content {
         let sha = sha256_str(&s);
         commands.spawn((
-            HclUpdateRequest { path: Some("mem://active.hcl".into()), sha256: sha, content: s },
+                            HclUpdateRequest { 
+                    path: Some("mem://active.hcl".into()), 
+                    sha256: sha, 
+                    content: s,
+                    authorization: None,
+                },
             Replicate::to_server(),
             Name::new("HclUpdateRequest"),
         ));
@@ -324,7 +330,12 @@ fn watch_local_hcl_file_and_publish(
             if let Some(mode) = mode {
                 if matches!(mode.0, crate::hcl::EditorMode::Edit) {
                     commands.spawn((
-                        HclUpdateRequest { path: Some(rel_path.clone()), sha256: sha.clone(), content: content.clone() },
+                        HclUpdateRequest { 
+                    path: Some(rel_path.clone()), 
+                    sha256: sha.clone(), 
+                    content: content.clone(),
+                    authorization: None,
+                },
                         Replicate::to_server(),
                         Name::new("HclUpdateRequest"),
                     ));
