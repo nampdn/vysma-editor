@@ -223,8 +223,9 @@ pub fn new_gui_app(add_inspector: bool) -> App {
         });
     }
 
+    // Always add Egui so editor UI can render
+    app.add_plugins(bevy_inspector_egui::bevy_egui::EguiPlugin::default());
     if add_inspector {
-        app.add_plugins(bevy_inspector_egui::bevy_egui::EguiPlugin::default());
         app.add_plugins(bevy_inspector_egui::quick::WorldInspectorPlugin::new());
     }
     app

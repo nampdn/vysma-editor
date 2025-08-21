@@ -77,13 +77,16 @@ impl ClientNetwork {
                 }
                 ClientTransports::WebTransport => {
                     add_netcode(&mut entity_mut)?;
-                    let certificate_digest = {
-                        #[cfg(target_family = "wasm")]
-                        { include_str!("../../../certificate/digest.txt").to_string() }
-                        #[cfg(not(target_family = "wasm"))]
-                        { "".to_string() }
-                    };
-                    entity_mut.insert(WebTransportClientIo { certificate_digest });
+                    #[cfg(feature = "webtransport")]
+                    {
+                        let certificate_digest = {
+                            #[cfg(target_family = "wasm")]
+                            { include_str!("../../../certificate/digest.txt").to_string() }
+                            #[cfg(not(target_family = "wasm"))]
+                            { "".to_string() }
+                        };
+                        entity_mut.insert(WebTransportClientIo { certificate_digest });
+                    }
                 }
                 #[cfg(feature = "steam")]
                 ClientTransports::Steam => {

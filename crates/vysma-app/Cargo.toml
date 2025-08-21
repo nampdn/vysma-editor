@@ -15,12 +15,13 @@ http_assets = ["vysma-hcl/http_assets"]
 visualizer = []
 steam = []
 bevygap_client = []
+platform = ["vysma-platform"]
 
 [dependencies]
 bevy = { version = "0.16", default-features = true }
 lightyear = { version = "0.22.5", features = ["netcode", "replication", "prediction", "interpolation", "input_native"] }
 vysma-net = { path = "../vysma-net" }
-vysma-platform = { path = "../vysma-platform" }
+vysma-platform = { path = "../vysma-platform", optional = true }
 vysma-hcl = { path = "../vysma-hcl" }
 clap = { version = "4.5.4", features = ["derive"] }
 rand = "0.9.2"

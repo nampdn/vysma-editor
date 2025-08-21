@@ -1,7 +1,6 @@
 pub mod prelude {
     pub use bevy::prelude::*;
     pub use vysma_net as net;
-    pub use vysma_platform as platform;
     pub use vysma_hcl as hcl;
 }
 

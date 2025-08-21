@@ -13,3 +13,5 @@ dotenvy = "0.15"
 sha2 = "0.10"
 walkdir = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] } 
+vysma-app = { path = "../vysma-app", default-features = false, features = ["server", "client", "gui"] }
+vysma-hcl = { path = "../vysma-hcl" }

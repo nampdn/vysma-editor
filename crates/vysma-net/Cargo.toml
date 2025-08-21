@@ -12,6 +12,7 @@ client = ["lightyear/client"]
 server = ["lightyear/server", "lightyear/udp"]
 steam = []
 websocket = []
+webtransport = []
 
 [dependencies]
 bevy = { version = "0.16", default-features = true }

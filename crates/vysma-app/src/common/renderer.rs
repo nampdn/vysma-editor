@@ -195,9 +195,10 @@ pub(crate) fn update_button_text(
     }
 }
 
-fn update_mode_text(mode: Res<EditorState>, mut q: Query<&mut Text, With<ModeText>>) {
+fn update_mode_text(mode: Option<Res<EditorState>>, mut q: Query<&mut Text, With<ModeText>>) {
     if let Ok(mut text) = q.get_single_mut() {
-        text.0 = match mode.0 {
+        let m = mode.as_ref().map(|m| m.0).unwrap_or(EditorMode::Preview);
+        text.0 = match m {
             EditorMode::Edit => "Mode: Edit".to_string(),
             EditorMode::Preview => "Mode: Preview".to_string(),
         };

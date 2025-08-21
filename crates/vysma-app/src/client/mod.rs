@@ -33,7 +33,8 @@ pub mod editor_ui {
         fn build(&self, app: &mut App) {
             app.init_resource::<EditorBuffer>();
             app.init_resource::<LastApplied>();
-            app.add_systems(Update, (initial_buffer_sync, ui_panel));
+            app.add_systems(Update, initial_buffer_sync);
+            app.add_systems(PostUpdate, ui_panel);
         }
     }
 
@@ -74,7 +75,7 @@ pub mod editor_ui {
         mut commands: Commands,
     ) {
         use bevy_inspector_egui::egui;
-        let ctx = egui_ctx.ctx_mut().expect("egui context");
+        let Ok(ctx) = egui_ctx.ctx_mut() else { return; };
         egui::Window::new("Vysma Editor").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label("Mode:");

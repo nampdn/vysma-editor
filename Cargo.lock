@@ -7645,6 +7645,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "vysma-app",
+ "vysma-hcl",
  "walkdir",
 ]
 

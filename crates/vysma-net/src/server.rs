@@ -55,8 +55,11 @@ impl ServerNetwork {
                 }
                 ServerTransports::WebTransport { local_port, certificate } => {
                     add_netcode(&mut entity_mut);
-                    let server_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), local_port);
-                    entity_mut.insert((LocalAddr(server_addr), WebTransportServerIo { certificate: (&certificate).into() }));
+                    #[cfg(feature = "webtransport")]
+                    {
+                        let server_addr = SocketAddr::new(Ipv4Addr::UNSPECIFIED.into(), local_port);
+                        entity_mut.insert((LocalAddr(server_addr), WebTransportServerIo { certificate: (&certificate).into() }));
+                    }
                 }
                 ServerTransports::WebSocket { local_port: _ } => {
                     add_netcode(&mut entity_mut);
@@ -89,6 +92,7 @@ impl Default for WebTransportCertificateSettings {
     }
 }
 
+#[cfg(feature = "webtransport")]
 impl From<&WebTransportCertificateSettings> for Identity {
     fn from(wt: &WebTransportCertificateSettings) -> Identity {
         match wt {
